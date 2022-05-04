@@ -1,21 +1,21 @@
 import numpy as np
-from .geometry import Point, Rectangle, Circle, Ring
+from .geometry import Point, Rectangle, Circle, Ring, Line
 from typing import Union
 import copy
 
 
 class Entity:
     def __init__(self, center: Point, heading: float, movable: bool = True, friction: float = 0):
-        self.center = center # this is x, y
+        self.center = center  # this is x, y
         self.heading = heading
         self.movable = movable
         self.color = 'ghost white'
         self.collidable = True
+        self.friction = friction  # Moved this out
         if movable:
-            self.friction = friction
-            self.velocity = Point(0,0) # this is xp, yp
-            self.acceleration = 0 # this is vp (or speedp)
-            self.angular_velocity = 0 # this is headingp
+            self.velocity = Point(0, 0)  # this is xp, yp
+            self.acceleration = 0  # this is vp (or speedp)
+            self.angular_velocity = 0  # this is headingp
             self.inputSteering = 0
             self.inputAcceleration = 0
             self.max_speed = np.inf
@@ -30,7 +30,7 @@ class Entity:
         self.inputAcceleration = inputAcceleration
     
     @property
-    def rear_dist(self) -> float: # distance between the rear wheels and the center of mass. This is needed to implement the kinematic bicycle model dynamics
+    def rear_dist(self) -> float:  # distance between the rear wheels and the center of mass. This is needed to implement the kinematic bicycle model dynamics
         if isinstance(self, RectangleEntity):
             # only for this function, we assume
             # (i) the longer side of the rectangle is always the nominal direction of the car
@@ -42,26 +42,31 @@ class Entity:
             return (self.inner_radius + self.outer_radius) / 2.
         raise NotImplementedError
     
-    def tick(self, dt: float):
+    def tick(self, dt, friction=None):
+        if friction:
+            print("Friction is:", friction)
+        else:
+            print("no fritcion")
+
         if self.movable:
             speed = self.speed
             heading = self.heading
-        
+
             # Kinematic bicycle model dynamics based on
             # "Kinematic and Dynamic Vehicle Models for Autonomous Driving Control Design" by
             # Jason Kong, Mark Pfeiffer, Georg Schildbach, Francesco Borrelli
             lr = self.rear_dist
-            lf = lr # we assume the center of mass is the same as the geometric center of the entity
+            lf = lr  # we assume the center of mass is the same as the geometric center of the entity
             beta = np.arctan(lr / (lf + lr) * np.tan(self.inputSteering))
-            
-            new_angular_velocity = speed * self.inputSteering # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
+
+            new_angular_velocity = speed * self.inputSteering  # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
             new_acceleration = self.inputAcceleration - self.friction
             new_speed = np.clip(speed + new_acceleration * dt, self.min_speed, self.max_speed)
             new_heading = heading + ((speed + new_speed)/lr)*np.sin(beta)*dt/2.
             angle = (heading + new_heading)/2. + beta
             new_center = self.center + (speed + new_speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
             new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
-            
+
             '''
             # Point-mass dynamics based on
             # "Active Preference-Based Learning of Reward Functions" by
@@ -79,16 +84,39 @@ class Entity:
             new_center = self.center + (self.velocity + new_velocity) * dt / 2.
             
             '''
-            
+
             self.center = new_center
             self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
             self.velocity = new_velocity
             self.acceleration = new_acceleration
             self.angular_velocity = new_angular_velocity
-            
+
             self.buildGeometry()
+
+    def isInside(self, other: Union['Line', 'Rectangle', 'Circle', 'Ring']) -> bool:  # Albin: Check to be certain that this works!!!
+        if isinstance(other, Line):
+            AM = Line(other.p1, self)
+            BM = Line(self, other.p2)
+            return np.close(np.abs(AM.dot(BM)), AM.length * BM.length)
+
+        elif isinstance(other, Rectangle):
+            # Based on https://stackoverflow.com/a/2763387
+            AB = Line(other.c1, other.c2)
+            AM = Line(other.c1, self)
+            BC = Line(other.c2, other.c3)
+            BM = Line(other.c2, self)
+
+            return 0 <= AB.dot(AM) <= AB.dot(AB) and 0 <= BC.dot(BM) <= BC.dot(BC)
+
+        elif isinstance(other, Circle):
+            return self.distanceTo(other.m) <= other.r
+
+        elif isinstance(other, Ring):
+            return other.r_inner <= self.distanceTo(other.m) <= other.r_outer
+
+        raise NotImplementedError
     
-    def buildGeometry(self): # builds the obj
+    def buildGeometry(self):  # builds the obj
         raise NotImplementedError
         
     def collidesWith(self, other: Union['Point','Entity']) -> bool:
