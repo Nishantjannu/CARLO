@@ -10,9 +10,9 @@ from .graphics import Text, Point as pnt  # very unfortunate indeed
 
 
 
-MAP_WIDTH = 80
-MAP_HEIGHT = 120
-LANE_WIDTH = 4.4
+MAP_WIDTH = 100  # 80
+MAP_HEIGHT = 100  # 120
+LANE_WIDTH = 4.4  #  4.4
 SIDEWALK_WIDTH = 2.0
 LANE_MARKER_HEIGHT = 3.8
 LANE_MARKER_WIDTH = 0.5
@@ -25,40 +25,40 @@ PPM = 5  # pixels per meter
 class IntersectionScenario(gym.Env):
     def __init__(self, goal):
         assert 0 <= goal <= 3, 'Undefined goal'
-    
+
         self.seed(0)  # just in case we forget seeding
-        
+
         self.active_goal = goal
-        
-        self.init_ego = Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
+
+        self.init_ego = Car(Point(MAP_WIDTH/2, 0), heading=np.pi/2) # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
         self.init_ego.velocity = Point(1., 0.)
         self.init_ego.min_speed = 0.
         self.init_ego.max_speed = 30.
-        
+
         self.dt = 0.1
         self.T = 20  # Maximum length of simulation
-        
+
         self.reset()
-        
+
     def reset(self):
         self.world = World(self.dt, width=MAP_WIDTH, height=MAP_HEIGHT, ppm=PPM)
-           
+
         self.ego = self.init_ego.copy()
 
         # Randomize intersection location, start position and start velocity IMPORTANT TO KNOW
         self.intersection_y = MAP_HEIGHT/2  # self.np_random.rand()*MAP_HEIGHT/2. + MAP_HEIGHT/4.
-        self.ego.center += Point(0, 0.5*(self.intersection_y-MAP_HEIGHT/10.))  # Point(self.np_random.rand() - 0.5, self.np_random.rand()*(self.intersection_y-MAP_HEIGHT/10.))
+        self.ego.center += Point(0, 0)  # Point(self.np_random.rand() - 0.5, self.np_random.rand()*(self.intersection_y-MAP_HEIGHT/10.))
         self.ego.velocity = Point(0, 2.5)
-       
+
         self.targets = []
-        self.targets.append(Point(0., self.intersection_y + LANE_WIDTH/2. + LANE_MARKER_WIDTH/2.))
+        self.targets.append(Point(0., self.intersection_y + LANE_WIDTH/2. + LANE_MARKER_WIDTH/2.))  # Might want to remove these
         self.targets.append(Point(MAP_WIDTH/2. + LANE_WIDTH/2. + LANE_MARKER_WIDTH/2., MAP_HEIGHT))
         self.targets.append(Point(MAP_WIDTH, self.intersection_y - LANE_WIDTH/2. - LANE_MARKER_WIDTH/2.))
 
         # Ice patch location
         icex1 = MAP_WIDTH / 2  # center x
         icey1 = self.intersection_y  # center y
-        icewidth = BUILDING_WIDTH  # width
+        icewidth = 30  # width
         iceheigth = 30  # height
 
         # Asphalt (drawing it here hides it)
@@ -71,6 +71,9 @@ class IntersectionScenario(gym.Env):
         self.world.add(Asphalt(Point(width1 / 2, icey1), Point(width1, MAP_HEIGHT)))  # Left
         width2 = MAP_WIDTH - (icex1 + icewidth / 2)
         self.world.add(Asphalt(Point(icex1 + icewidth / 2 + width2 / 2, icey1), Point(width2, MAP_HEIGHT)))  # Right
+
+        # Ice patch
+        self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
 
         # Pretty things on the side of the road
         self.world.add(Painting(Point(MAP_WIDTH - BUILDING_WIDTH/2., MAP_HEIGHT - (TOP_BUILDING_HEIGHT-self.intersection_y)/2.), Point(BUILDING_WIDTH+2*SIDEWALK_WIDTH, TOP_BUILDING_HEIGHT-self.intersection_y+2*SIDEWALK_WIDTH), 'gray64'))
@@ -97,16 +100,13 @@ class IntersectionScenario(gym.Env):
         self.world.add(RectangleBuilding(Point(BUILDING_WIDTH/2., (BOTTOM_BUILDING_HEIGHT+self.intersection_y)/2.), Point(BUILDING_WIDTH, BOTTOM_BUILDING_HEIGHT+self.intersection_y)))
         self.world.add(RectangleBuilding(Point(MAP_WIDTH - BUILDING_WIDTH/2., (BOTTOM_BUILDING_HEIGHT+self.intersection_y)/2.), Point(BUILDING_WIDTH, BOTTOM_BUILDING_HEIGHT+self.intersection_y)))
 
-        # Ice patch - makes it being drawn on top of everything but the car
-        self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
-
         self.world.add(self.ego)
-        
+
         return self._get_obs()
-        
+
     def close(self):
         self.world.close()
-        
+
     @property
     def observation_space(self):
         low = np.array([0, 0, self.ego.min_speed, 0, MAP_HEIGHT/4.])
@@ -116,7 +116,7 @@ class IntersectionScenario(gym.Env):
     @property
     def action_space(self):
         return Box(low=np.array([-0.5,-2.0]), high=np.array([0.5,1.5]))
-    
+
     def seed(self, seed):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
@@ -126,23 +126,23 @@ class IntersectionScenario(gym.Env):
         if self.active_goal < len(self.targets):
             return self.targets[self.active_goal].distanceTo(self.ego) < 1.
         return np.min([self.targets[i].distanceTo(self.ego) for i in range(len(self.targets))]) < 1.
-    
+
     @property
     def collision_exists(self):
         return self.world.collision_exists()
-        
+
     @property
     def ego_approaching_intersection(self):
         return MAP_HEIGHT - (TOP_BUILDING_HEIGHT - self.intersection_y) - SIDEWALK_WIDTH - LANE_WIDTH > self.ego.y > BOTTOM_BUILDING_HEIGHT + self.intersection_y - 5 and \
                 BUILDING_WIDTH < self.ego.x < MAP_WIDTH - BUILDING_WIDTH
-        
+
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         self.ego.set_control(action[0], action[1])
         self.world.tick()
-        
+
         return self._get_obs(), self._get_reward(), self.collision_exists or self.target_reached or self.world.t >= self.T, {}
-        
+
     def _get_reward(self):
         """
         The reward for a given state. Should be updated. Could also be removed since we wont do reinforcement learning
@@ -152,7 +152,7 @@ class IntersectionScenario(gym.Env):
         if self.active_goal < len(self.targets):
             return -0.01*self.targets[self.active_goal].distanceTo(self.ego)
         return -0.01*np.min([self.targets[i].distanceTo(self.ego) for i in range(len(self.targets))])
-        
+
     def _get_obs(self):
         """
         Returns observation:
@@ -160,13 +160,12 @@ class IntersectionScenario(gym.Env):
         and location of intersection (on the y-axis)
         """
         return np.array([self.ego.center.x, self.ego.center.y, self.ego.speed, self.ego.heading, self.intersection_y])
-        
+
     def render(self, mode='rgb'):
         self.world.render()
-        
+
     def write(self, text):  # this is hacky, it would be good to have a write() function in world class
         if hasattr(self, 'txt'):
             self.txt.undraw()
         self.txt = Text(pnt(PPM*(MAP_WIDTH - BUILDING_WIDTH+2), self.world.visualizer.display_height - PPM*10), text)
         self.txt.draw(self.world.visualizer.win)
-
