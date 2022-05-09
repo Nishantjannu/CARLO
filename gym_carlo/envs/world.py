@@ -7,8 +7,9 @@ class World:
     def __init__(self, dt: float, width: float, height: float, ppm: float = 8):
         self.dynamic_agents = []
         self.static_agents = []
-        self.t = 0 # simulation time
-        self.dt = dt # simulation time step
+        self.friction_agents = []
+        self.t = 0  # simulation time
+        self.dt = dt  # simulation time step
         self.visualizer = Visualizer(width, height, ppm=ppm)
         
     def add(self, entity: Entity):
@@ -16,10 +17,18 @@ class World:
             self.dynamic_agents.append(entity)
         else:
             self.static_agents.append(entity)
+            if entity.friction != 0:
+                self.friction_agents.append(entity)
         
     def tick(self):
         for agent in self.dynamic_agents:
-            agent.tick(self.dt)
+            friction = None
+            for environment in self.friction_agents:
+                if agent.center.isInside(environment.obj):
+                    if friction is not None:
+                        print("Agent inside multiple objects")
+                    friction = environment.friction  # Add a break after this instead when we do the real thing. Print is for debugging
+            agent.tick(self.dt, friction)
         self.t += self.dt
     
     def render(self):
@@ -30,7 +39,7 @@ class World:
     def agents(self):
         return self.static_agents + self.dynamic_agents
         
-    def collision_exists(self, agent = None):
+    def collision_exists(self, agent=None):
         if agent is None:
             for i in range(len(self.dynamic_agents)):
                 for j in range(i+1, len(self.dynamic_agents)):
@@ -59,3 +68,4 @@ class World:
     def reset(self):
         self.dynamic_agents = []
         self.t = 0
+

@@ -35,8 +35,8 @@ class Point:
     def isInside(self, other: Union['Line', 'Rectangle', 'Circle', 'Ring']) -> bool:
         if isinstance(other, Line):
             AM = Line(other.p1, self)
-            MB = Line(self, other.p2)
-            return np.close(np.abs(AM.dot(BM)), AM.length * MB.length)
+            BM = Line(self, other.p2)
+            return np.close(np.abs(AM.dot(BM)), AM.length * BM.length)
         
         elif isinstance(other, Rectangle):
             # Based on https://stackoverflow.com/a/2763387

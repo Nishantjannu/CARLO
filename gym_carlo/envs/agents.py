@@ -13,7 +13,7 @@ class Car(RectangleEntity):
         self.collidable = True
         
 class Pedestrian(CircleEntity):
-    def __init__(self, center: Point, heading: float, color: str = 'LightSalmon3'): # after careful consideration, I decided my color is the same as a salmon, so here we go.
+    def __init__(self, center: Point, heading: float, color: str = 'LightSalmon3'):  # after careful consideration, I decided my color is the same as a salmon, so here we go.
         radius = 0.5
         movable = True
         friction = 0.2
@@ -29,6 +29,24 @@ class RectangleBuilding(RectangleEntity):
         super(RectangleBuilding, self).__init__(center, heading, size, movable, friction)
         self.color = color
         self.collidable = True
+
+class IcePatch(RectangleEntity):
+    def __init__(self, center: Point, size: Point, color: str = 'snow'):
+        heading = 0.
+        movable = False
+        friction = 0.25  # Actually start use this, implement a new one for road / for rest
+        super(IcePatch, self).__init__(center, heading, size, movable, friction)
+        self.color = color
+        self.collidable = False
+
+class Asphalt(RectangleEntity):
+    def __init__(self, center: Point, size: Point, color: str = 'navy'):
+        heading = 0.
+        movable = False
+        friction = 0.95  # Actually start use this, implement a new one for road / for rest
+        super(Asphalt, self).__init__(center, heading, size, movable, friction)
+        self.color = color
+        self.collidable = False
         
 class CircleBuilding(CircleEntity):
     def __init__(self, center: Point, radius: float, color: str = 'gray26'):
