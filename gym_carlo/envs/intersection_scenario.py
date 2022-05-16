@@ -12,7 +12,9 @@ from .graphics import Text, Point as pnt  # very unfortunate indeed
 
 MAP_WIDTH = 100  # 80
 MAP_HEIGHT = 100  # 120
-LANE_WIDTH = 4.4  #  4.4
+LANE_WIDTH = 8  # 4.4
+INITIAL_VELOCITY = 3
+DELTA_T = 0.1
 SIDEWALK_WIDTH = 2.0
 LANE_MARKER_HEIGHT = 3.8
 LANE_MARKER_WIDTH = 0.5
@@ -20,7 +22,7 @@ BUILDING_WIDTH = (MAP_WIDTH - 2*SIDEWALK_WIDTH - 2*LANE_WIDTH - LANE_MARKER_WIDT
 TOP_BUILDING_HEIGHT = MAP_HEIGHT - (LANE_MARKER_WIDTH/2. + LANE_WIDTH + SIDEWALK_WIDTH)  # intersection_y will be subtracted
 BOTTOM_BUILDING_HEIGHT = -LANE_MARKER_WIDTH/2. - LANE_WIDTH - SIDEWALK_WIDTH  # intersection_y will be added
 
-PPM = 5  # pixels per meter
+PPM = 5  # 5  # pixels per meter
 
 class IntersectionScenario(gym.Env):
     def __init__(self, goal):
@@ -30,13 +32,13 @@ class IntersectionScenario(gym.Env):
 
         self.active_goal = goal
 
-        self.init_ego = Car(Point(MAP_WIDTH/2, 0), heading=np.pi/2) # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
+        self.init_ego = Car(Point(MAP_WIDTH/2, 0), heading=np.pi/2)  # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
         self.init_ego.velocity = Point(1., 0.)
         self.init_ego.min_speed = 0.
-        self.init_ego.max_speed = 30.
+        self.init_ego.max_speed = 20.
 
-        self.dt = 0.1
-        self.T = 20  # Maximum length of simulation
+        self.dt = DELTA_T
+        self.T = 200  # Maximum length of simulation
 
         self.reset()
 
@@ -47,8 +49,7 @@ class IntersectionScenario(gym.Env):
 
         # Randomize intersection location, start position and start velocity IMPORTANT TO KNOW
         self.intersection_y = MAP_HEIGHT/2  # self.np_random.rand()*MAP_HEIGHT/2. + MAP_HEIGHT/4.
-        self.ego.center += Point(0, 0)  # Point(self.np_random.rand() - 0.5, self.np_random.rand()*(self.intersection_y-MAP_HEIGHT/10.))
-        self.ego.velocity = Point(0, 2.5)
+        self.ego.velocity = Point(0, INITIAL_VELOCITY)
 
         self.targets = []
         self.targets.append(Point(0., self.intersection_y + LANE_WIDTH/2. + LANE_MARKER_WIDTH/2.))  # Might want to remove these
