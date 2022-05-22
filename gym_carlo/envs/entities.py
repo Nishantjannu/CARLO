@@ -3,6 +3,9 @@ from .geometry import Point, Rectangle, Circle, Ring, Line
 from typing import Union
 import copy
 
+from dynamics import get_tire_angles, calc_lateral_tire_force  # helper functions, maybe move here
+from nominal_trajectory import Nominal_Trajectory_Handler
+
 
 class Entity:
     def __init__(self, center: Point, heading: float, movable: bool = True, friction: float = 0):
@@ -20,15 +23,31 @@ class Entity:
             self.inputAcceleration = 0
             self.max_speed = np.inf
             self.min_speed = 0
-    
+
+            # Our Bicycle model
+            self.U_x = 0
+            self.U_y = 0
+            self.r = 0
+            self.s = 0
+            self.e = 0
+            self.delta_psi = 0
+
+            # Other constants that we need TODO add these as input (in agents.py)
+            self.m = 1  # Mass of vehicle
+            self.I_z = 1  # Yaw inertial of vehicle
+            self.a = 1  # Distance to front axis from center of mass
+            self.b = 1  # Distance to rear axis from center of mass
+
+            self.traj_handler = None  # need to initialize this properly
+
     @property
     def speed(self) -> float:
         return self.velocity.norm(p = 2) if self.movable else 0
-    
+
     def set_control(self, inputSteering: float, inputAcceleration: float):
         self.inputSteering = inputSteering
         self.inputAcceleration = inputAcceleration
-    
+
     @property
     def rear_dist(self) -> float:  # distance between the rear wheels and the center of mass. This is needed to implement the kinematic bicycle model dynamics
         if isinstance(self, RectangleEntity):
@@ -41,7 +60,7 @@ class Entity:
         elif isinstance(self, RingEntity):
             return (self.inner_radius + self.outer_radius) / 2.
         raise NotImplementedError
-    
+
     def tick(self, dt, friction=None):
         if friction:
             print("Friction is:", friction)
@@ -67,22 +86,51 @@ class Entity:
             new_center = self.center + (speed + new_speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
             new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
 
+            """
+            New approach
+            """
+            delta = self.inputSteering
+
+            kappa = self.traj_handler.get_kappa()4
+            angle_f, angle_r = get_tire_angles(self.U_x, self.U_y, self.r, delta, self.a, self.b)
+            Fx_r, Fy_r = calc_lateral_tire_force(angle_r, friction)
+            Fx_f, Fy_f = calc_lateral_tire_force(angle_f, friction)
+
+            # Dynamics equations
+            U_x_dot = (Fx_f + Fx_r) / self.m + self.r*self.U_y
+            U_y_dot = (Fy_f + Fy_r) / self.m - self.r*self.U_x
+            r_dot = (self.a*Fy_f - self.b * Fy_r) / self.I_z
+            s_dot = U_x - U_y * delta_psi
+            e_dot = U_x + U_y * delta_psi
+            delta_psi_dot = self.r - kappa*s_dot
+
+            # Update states
+            self.U_x += U_x_dot * dt
+            self.U_y += U_y_dot * dt
+            self.r += r_dot * dt
+            self.s += s_dot * dt
+            self.e += e_dot * dt
+            self.delta_psi += delta_psi_dot * dt
+
+            # update self.center
+
+
             '''
             # Point-mass dynamics based on
             # "Active Preference-Based Learning of Reward Functions" by
             # Dorsa Sadigh, Anca D. Dragan, S. Shankar Sastry, Sanjit A. Seshia
-            
+
             new_angular_velocity = speed * self.inputSteering
             new_acceleration = self.inputAcceleration - self.friction * speed
-            
+
             new_heading = heading + (self.angular_velocity + new_angular_velocity) * dt / 2.
             new_speed = np.clip(speed + (self.acceleration + new_acceleration) * dt / 2., self.min_speed, self.max_speed)
-            
+
             new_velocity = Point(((speed + new_speed) / 2.) * np.cos((new_heading + heading) / 2.),
                                     ((speed + new_speed) / 2.) * np.sin((new_heading + heading) / 2.))
-            
+
             new_center = self.center + (self.velocity + new_velocity) * dt / 2.
-            
+
             '''
 
             self.center = new_center
@@ -93,7 +141,7 @@ class Entity:
 
             self.buildGeometry()
 
-    def isInside(self, other: Union['Line', 'Rectangle', 'Circle', 'Ring']) -> bool:  # Albin: Check to be certain that this works!!!
+    def isInside(self, other: Union['Line', 'Rectangle', 'Circle', 'Ring']) -> bool:
         if isinstance(other, Line):
             AM = Line(other.p1, self)
             BM = Line(self, other.p2)
@@ -115,27 +163,27 @@ class Entity:
             return other.r_inner <= self.distanceTo(other.m) <= other.r_outer
 
         raise NotImplementedError
-    
+
     def buildGeometry(self):  # builds the obj
         raise NotImplementedError
-        
+
     def collidesWith(self, other: Union['Point','Entity']) -> bool:
         if isinstance(other, Entity):
             return self.obj.intersectsWith(other.obj)
         elif isinstance(other, Point):
             return self.obj.intersectsWith(other)
         raise NotImplementedError
-        
+
     def distanceTo(self, other: Union['Point','Entity']) -> float:
         if isinstance(other, Entity):
             return self.obj.distanceTo(other.obj)
         elif isinstance(other, Point):
             return self.obj.distanceTo(other)
         raise NotImplementedError
-        
+
     def copy(self):
         return copy.deepcopy(self)
-        
+
     @property
     def x(self):
         return self.center.x
@@ -143,7 +191,7 @@ class Entity:
     @property
     def y(self):
         return self.center.y
-        
+
     @property
     def xp(self):
         return self.velocity.x
@@ -151,13 +199,13 @@ class Entity:
     @property
     def yp(self):
         return self.velocity.y
-    
+
 class RectangleEntity(Entity):
     def __init__(self, center: Point, heading: float, size: Point, movable: bool = True, friction: float = 0):
         super(RectangleEntity, self).__init__(center, heading, movable, friction)
         self.size = size
         self.buildGeometry()
-    
+
     @property
     def edge_centers(self):
         edge_centers = np.zeros((4,2), dtype=np.float32)
@@ -170,7 +218,7 @@ class RectangleEntity(Entity):
         edge_centers[2] = [x - w / 2. * np.cos(self.heading), y - w / 2. * np.sin(self.heading)]
         edge_centers[3] = [x + h / 2. * np.sin(self.heading), y - h / 2. * np.cos(self.heading)]
         return edge_centers
-        
+
     @property
     def corners(self):
         ec = self.edge_centers
@@ -181,26 +229,26 @@ class RectangleEntity(Entity):
         corners.append(Point(*(ec[3] + ec[2] - c)))
         corners.append(Point(*(ec[0] + ec[3] - c)))
         return corners
-        
+
     def buildGeometry(self):
         C = self.corners
         self.obj = Rectangle(*C[:-1])
-        
+
 class CircleEntity(Entity):
     def __init__(self, center: Point, heading: float, radius: float, movable: bool = True, friction: float = 0):
         super(CircleEntity, self).__init__(center, heading, movable, friction)
         self.radius = radius
         self.buildGeometry()
-        
+
     def buildGeometry(self):
         self.obj = Circle(self.center, self.radius)
-                    
+
 class RingEntity(Entity):
     def __init__(self, center: Point, heading: float, inner_radius: float, outer_radius: float, movable: bool = True, friction: float = 0):
         super(RingEntity, self).__init__(center, heading, movable, friction)
         self.inner_radius = inner_radius
         self.outer_radius = outer_radius
         self.buildGeometry()
-        
+
     def buildGeometry(self):
         self.obj = Ring(self.center, self.inner_radius, self.outer_radius)

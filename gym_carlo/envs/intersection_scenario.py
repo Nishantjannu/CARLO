@@ -9,7 +9,7 @@ from .geometry import Point
 from .graphics import Text, Point as pnt  # very unfortunate indeed
 
 
-
+# Important settings for the map
 MAP_WIDTH = 100  # 80
 MAP_HEIGHT = 100  # 120
 LANE_WIDTH = 8  # 4.4
