@@ -91,31 +91,43 @@ def linear_dynamics(state, control, prev_values):
     delta = control
 
     U_y, r, _, _ = state
-    _, _, kappa = get_path_traj()
+
+    ###### TODO: pass kappa ########
+    U_x0, _, kappa = get_path_traj()
     # Fx_net = - U_y * r * m
     
-    ############ LINEARIZATION ################
-    U_x0, U_y0, delta_0, Fy_r0, Fy_f0 , r0 = prev_values
+    # extract previous values
 
+    U_y0, r0, _, _  = prev_values["state"]
+    delta_0 = prev_values["control"]
+    Fy_r0, Fy_f0 = prev_values["tire_forces"]
+
+    ############ LINEARIZATION ################
+
+    # computing partial derivatives- rear tire forces
     dFyr_dUy = beta * U_x0 / ((U_y0 - b * r0) * (U_y0 - b * r0)) 
     dFyr_dr = - b * dFyr_dUy
-    Fy_r = Fy_r0 + dFyr_dUy * (U_y - U_y0) + dFyr_dr * (r - r0)
-    # Fy_r = A @ X + B @ U + C
-    # where A = [A_Uy A_r A_e A_psi] , B = B_delta 
 
+    # linearized rear tire force
+    Fy_r = Fy_r0 + dFyr_dUy * (U_y - U_y0) + dFyr_dr * (r - r0)
+    # Fy_r = A_Fyr @ X + B_Fyr @ U + B_Fyr
     A_Fyr = np.array([dFyr_dUy, dFyr_dr, 0, 0])
     B_Fyr = 0
     C_Fyr = Fy_r0 -  dFyr_dUy *  U_y0 -  dFyr_dr * r0
     
+    # computing partial derivatives- front tire forces
     dFyf_dUy = beta * U_x0 / ((U_y0 - a * r0) * (U_y0 - a * r0)) 
     dFyf_dr = - a * dFyr_dUy
 
+    # linearized front tire force
     Fy_f = Fy_f0 + dFyf_dUy * (U_y - U_y0) + dFyf_dr * (r - r0) - beta * (delta - delta_0)
 
+    # Fy_F = A_Fyf @ X + B_Fyf @ U + B_Fyf
     A_Fyf = np.array([dFyf_dUy, dFyf_dr, 0, 0])
     B_Fyf = - beta
     C_Fyf = Fy_f0 -  dFyf_dUy *  U_y0 -  dFyf_dr * r0 + beta * delta_0
 
+    # using linearized tire forces to calculate linearlized dynamics
     A_Uy = (1/m)*(A_Fyr + A_Fyf) 
     A_Uy[1] -= U_x0
     B_Uy = (1/m)*(B_Fyr + B_Fyf)
