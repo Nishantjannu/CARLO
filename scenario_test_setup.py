@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import gym_carlo
 import gym
@@ -6,6 +7,9 @@ import argparse
 from gym_carlo.envs.interactive_controllers import GoalController
 from utils_new import *
 from mpc import MPC
+
+# TODO change the way these are accessed/set
+from gym_carlo.envs.intersection_scenario import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
 
 
 def controller_mapping(scenario_name, control):
@@ -16,7 +20,17 @@ def controller_mapping(scenario_name, control):
 
 
 def take_action_placeholder(obs):
-    return [0, 1]
+    return [0, 0]
+
+
+def simple_controller_1(delta_psi):
+    if delta_psi > 0:
+        steering = -1
+    elif delta_psi < 0:
+        steering = 1
+    else:
+        steering = 0
+    return [steering, 0]
 
 
 if __name__ == '__main__':
@@ -33,6 +47,12 @@ if __name__ == '__main__':
         goal_id = np.argwhere(np.array(goals[scenario_name]) == args.goal.lower())[0, 0]  # hmm, unreadable
     env = gym.make(scenario_name + 'Scenario-v0', goal=goal_id)
 
+
+    opt_traj = optimal_trajectory(MAP_HEIGHT, MAP_WIDTH, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T)
+    # Debug
+    # np.set_printoptions(threshold=sys.maxsize)
+    # print(opt_traj)
+
     episode_number = 10 if args.visualize else 100
     success_counter = 0
     env.T = 200*env.dt - env.dt/2.  # Run for at most 200dt = 20 seconds
@@ -46,13 +66,26 @@ if __name__ == '__main__':
             interactive_policy = GoalController(env.world)
 
         # Run the game until it is complete
+        iteration = 0
         while not done:
             t = time.time()
-            obs = np.array(obs).reshape(1, -1)
-            u = controller_mapping(scenario_name, interactive_policy.control) if args.visualize else goal_id
-            action = take_action_placeholder(obs)
+            # obs = np.array(obs).reshape(1, -1)
+            u = controller_mapping(scenario_name, interactive_policy.control) if args.visualize else goal_id  # What does this do..?
+
+            print("obs, obs.shape:", obs, obs.shape)
+            x, y, heading = obs[0], obs[1], obs[3]
+            curr_pos = (x, y, heading)
+            e, delta_psi = calc_offset(opt_traj, curr_pos, MAP_HEIGHT, MAP_WIDTH, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T, iteration)
+            action = simple_controller_1(delta_psi)
+            print("delta_psi:", delta_psi, "action", action)
+
+            # action = take_action_placeholder(obs)
             # action, _ = controller.calculate_control(obs)
             obs, _, done, _ = env.step(action)
+
+
+            iteration += 1
+
             if args.visualize:
                 env.render()
                 while time.time() - t < env.dt/2:
