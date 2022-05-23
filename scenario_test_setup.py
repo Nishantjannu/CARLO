@@ -4,13 +4,14 @@ import gym_carlo
 import gym
 import time
 import argparse
+import matplotlib.pyplot as plt
 from gym_carlo.envs.interactive_controllers import GoalController
 from utils_new import *
 from mpc import MPC
 from nominal_trajectory import Nominal_Trajectory_Handler
 
 # TODO change the way these are accessed/set
-from gym_carlo.envs.intersection_scenario import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
+from world_constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
 
 
 def controller_mapping(scenario_name, control):
@@ -74,18 +75,27 @@ if __name__ == '__main__':
         while not done:
             t = time.time()
 
-            x, y, heading = obs[0], obs[1], obs[3]  # will also return r and U_y
-            curr_pos = (x, y, heading)
-            e, delta_psi = trajectory_handler.calc_offset(opt_traj, curr_pos)
+            #print("s", trajectory_handler.get_s())
+
+            # e, delta_psi = trajectory_handler.calc_offset(opt_traj, curr_pos)
+
+            U_y, r, e, delta_psi, _, _, _ = obs
+
             # action = simple_controller_1(delta_psi)
             # action = take_action_placeholder(obs)
             # Input to MPC-controler: [U_y, r, delta_psi, e]
-            curr_state = np.array([0, 0, delta_psi, e])
+            curr_state = np.array([U_y, r, e, delta_psi])
+            print("current state:", curr_state)
+
             prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
-            u0 = prev_controls[0]
-            action = [0, u0]  # 0 acceleration, u0 as steering
+            u0 = prev_controls[:, 0][0]
+            print("Control u0:", u0)
+            #print("u0:", u0)
+            action = [u0, 0]  # 0 acceleration, u0 as steering
             obs, _, done, _ = env.step(action)
 
+            # print("opt_traj[:, 0:2].shape", opt_traj[:, 0:2].shape)
+            # env.world.visualizer.draw_points(opt.traj[:, 0:2])
 
             trajectory_handler.increment_current_index()
 

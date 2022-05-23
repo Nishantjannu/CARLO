@@ -13,22 +13,13 @@ state = [U_y, r, delta_psi, e]
 
 import numpy as np
 
-# Mass of vehicle
-m = 1
+# TODO store these in a better place!!!!
+m = 1724  # Mass of vehicle
+Iz = 1100  # Yaw inertial of vehicle
+a = 1.35  # Distance to front axis from center of mass
+b = 1.15  # Distance to rear axis from center of mass
 
-# Yaw inertial of vehicle
-Iz = 1
-
-# Distance to front axis from center of mass
-a = 1
-
-# Distance to rear axis from center of mass
-b = 1
-
-# tire-slip angle to lateral force ratio (for asphalt)
-beta = 1.2 
-
-# linearized version of the fiala tire model 
+# linearized version of the fiala tire model
 # returns force and gradient at given alpha
 def linear_fiala(alpha, road_type):
     if road_type == "asphalt":
@@ -47,68 +38,33 @@ def linear_fiala(alpha, road_type):
             return - alpha, -1.
 
 
-# net tire slip angle in degrees, force in kN
-def calc_lateral_tire_force(angle):
-    # This can be done using a nonlinear function or using a linear function
-    return - beta * angle
-
-
-def get_path_traj():
-    return U_x, s, kappa
-
-def get_lateral_forces():
-    return Fy_r, Fy_f
-
 def get_tire_angles(U_x, U_y, r, delta):
-    angle_f = np.arctan2((U_y + a*r) / U_x) - delta
-    angle_r = np.arctan2((U_y + b*r) / U_x)
+    angle_f = np.arctan2((U_y + a*r), U_x) - delta
+    angle_r = np.arctan2((U_y - b*r), U_x)
     return angle_f, angle_r
 
 
-def true_dynamics(state, control):
-    delta = control
-    U_x, U_y, r, s, e, delta_psi = state
-    U_x, s, kappa = get_path_traj()
-    # get kappa from where?
-    angle_f, angle_r = get_tire_angles(U_x, U_y, r, delta)
-    Fx_r, Fy_r = calc_lateral_tire_force(angle_r)
-    Fx_f, Fy_f = calc_lateral_tire_force(angle_f)
+def true_dynamics(state, control, Ux, kappa, road_type):
+    Uy, r, e, delta_psi = state
+
+    angle_f, angle_r = get_tire_angles(Ux, Uy, r, control)
+    fy_f, _ = linear_fiala(angle_r, road_type)
+    fy_r, _ = linear_fiala(angle_f, road_type)
 
     # dynamics equations
+    U_y_dot = (fy_f + fy_r) / m - r*Ux
+    r_dot = (a*fy_f - b * fy_r) / Iz
+    e_dot = Uy + Ux * delta_psi
+    delta_psi_dot = r - kappa*Ux
 
-    U_x = (Fx_f + Fx_r) / m + r*U_y
-    U_y_dot = (Fy_f + Fy_r) / m - r*U_x
-    r_dot = (a*Fy_f - b * Fy_r) / I_z
-    s_dot = U_x - U_y * delta_psi
-    e_dot = U_x + U_y * delta_psi
-    delta_psi_dot = r - kappa*s_dot
+    f_true = np.array([U_y_dot, r_dot, e_dot, delta_psi_dot])
 
-
-def no_longitud_dynamics(state, control):
-
-    delta = control
-
-    U_y, r, e, delta_psi = state
-    U_x, s, kappa, Fx_r, Fx_f = get_path_traj()
-
-    angle_f, angle_r = get_tire_angles(U_x, U_y, r)
-    Fy_r = calc_lateral_tire_force(angle_r)
-    Fy_f = calc_lateral_tire_force(angle_f)
-
-    U_x_dot = (Fx_f + Fx_r) / m + r* U_y
-    U_y_dot = (Fy_f + Fy_r) / m - r*U_x
-    r_dot = (a*Fy_f - b * Fy_r) / I_z
-    s_dot = U_x - U_y * delta_psi
-    e_dot = U_x + U_y * delta_psi
-    delta_psi_dot = r - kappa*s_dot
-
-    return 
+    return f_true
 
 
-def linear_dynamics(prev_values):
 
-    Ux, kappa = get_path_traj()
-    
+def linear_dynamics(prev_values, Ux, kappa, road_type):
+
     # extract previous values
     Uyo, ro, _, _  = prev_values["state"]
     uo = prev_values["control"]
@@ -118,8 +74,8 @@ def linear_dynamics(prev_values):
     alpha_f_bar = (Uyo + a*ro)/ Ux - uo
     alpha_r_bar = (Uyo - b*ro)/ Ux
 
-    fy_f_bar, cf = linear_fiala(alpha_f_bar, "asphalt")
-    fy_r_bar, cr = linear_fiala(alpha_r_bar, "asphalt")
+    fy_f_bar, cf = linear_fiala(alpha_f_bar, road_type)
+    fy_r_bar, cr = linear_fiala(alpha_r_bar, road_type)
 
     A_Uy = np.array([(cf + cr)/ (m*Ux), (cf*a - cr*b)/ (m*Ux) - Ux, 0, 0 ])
     B_Uy = - cf/m
@@ -142,4 +98,3 @@ def linear_dynamics(prev_values):
     C = np.array([C_Uy, C_r, C_e, C_psi])
 
     return (A, B, C)
-  

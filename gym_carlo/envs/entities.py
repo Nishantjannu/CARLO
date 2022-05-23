@@ -3,8 +3,9 @@ from .geometry import Point, Rectangle, Circle, Ring, Line
 from typing import Union
 import copy
 
-from dynamics import get_tire_angles, calc_lateral_tire_force  # helper functions, maybe move here
+from dynamics import true_dynamics
 from nominal_trajectory import Nominal_Trajectory_Handler
+from world_constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
 
 
 class Entity:
@@ -25,20 +26,20 @@ class Entity:
             self.min_speed = 0
 
             # Our Bicycle model
-            self.U_x = 0
             self.U_y = 0
             self.r = 0
-            self.s = 0
             self.e = 0
             self.delta_psi = 0
 
             # Other constants that we need TODO add these as input (in agents.py)
-            self.m = 1  # Mass of vehicle
-            self.I_z = 1  # Yaw inertial of vehicle
-            self.a = 1  # Distance to front axis from center of mass
-            self.b = 1  # Distance to rear axis from center of mass
+            # From Model Predictive Control for Vehicle Stabilization at the Limits of handling
+            # by Craig Earl Beal and J. Christian Gerdes
+            self.m = 1724  # Mass of vehicle
+            self.I_z = 1100  # Yaw inertial of vehicle
+            self.a = 1.35  # Distance to front axis from center of mass
+            self.b = 1.15  # Distance to rear axis from center of mass
 
-            self.traj_handler = None  # need to initialize this properly
+            self.traj_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
 
     @property
     def speed(self) -> float:
@@ -62,10 +63,10 @@ class Entity:
         raise NotImplementedError
 
     def tick(self, dt, friction=None):
-        if friction:
-            print("Friction is:", friction)
-        else:
-            print("no fritcion")
+        # if friction:
+        #     print("Friction is:", friction)
+        # else:
+        #     print("no fritcion")
 
         if self.movable:
             speed = self.speed
@@ -74,41 +75,39 @@ class Entity:
             # Kinematic bicycle model dynamics based on
             # "Kinematic and Dynamic Vehicle Models for Autonomous Driving Control Design" by
             # Jason Kong, Mark Pfeiffer, Georg Schildbach, Francesco Borrelli
-            lr = self.rear_dist
-            lf = lr  # we assume the center of mass is the same as the geometric center of the entity
-            beta = np.arctan(lr / (lf + lr) * np.tan(self.inputSteering))
-
-            new_angular_velocity = speed * self.inputSteering  # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
-            new_acceleration = self.inputAcceleration - self.friction
-            new_speed = np.clip(speed + new_acceleration * dt, self.min_speed, self.max_speed)
-            new_heading = heading + ((speed + new_speed)/lr)*np.sin(beta)*dt/2.
-            angle = (heading + new_heading)/2. + beta
-            new_center = self.center + (speed + new_speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
-            new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
+            # lr = self.rear_dist
+            # lf = lr  # we assume the center of mass is the same as the geometric center of the entity
+            # beta = np.arctan(lr / (lf + lr) * np.tan(self.inputSteering))
+            #
+            # new_angular_velocity = speed * self.inputSteering  # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
+            # new_acceleration = self.inputAcceleration - self.friction
+            # new_speed = np.clip(speed + new_acceleration * dt, self.min_speed, self.max_speed)
+            # new_heading = heading + ((speed + new_speed)/lr)*np.sin(beta)*dt/2.
+            # angle = (heading + new_heading)/2. + beta
+            # new_center = self.center + (speed + new_speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
+            # new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
 
             """
             New approach
             """
             delta = self.inputSteering
 
-            kappa = self.traj_handler.get_kappa()4
-            angle_f, angle_r = get_tire_angles(self.U_x, self.U_y, self.r, delta, self.a, self.b)
-            Fx_r, Fy_r = calc_lateral_tire_force(angle_r, friction)
-            Fx_f, Fy_f = calc_lateral_tire_force(angle_f, friction)
+            kappa = self.traj_handler.get_kappa()
+            U_x = self.traj_handler.get_U_x()
 
-            # Dynamics equations
-            U_x_dot = (Fx_f + Fx_r) / self.m + self.r*self.U_y
-            U_y_dot = (Fy_f + Fy_r) / self.m - self.r*self.U_x
-            r_dot = (self.a*Fy_f - self.b * Fy_r) / self.I_z
-            s_dot = U_x - U_y * delta_psi
-            e_dot = U_x + U_y * delta_psi
-            delta_psi_dot = self.r - kappa*s_dot
+            state = np.array([self.U_y, self.r, self.e, self.delta_psi])
+
+            road_types = {
+                0.25: "ice",
+                0.95: "asphalt"
+            }
+
+            f_true = true_dynamics(state, delta, U_x, kappa, road_types[friction])
+            U_y_dot, r_dot, e_dot, delta_psi_dot = f_true
 
             # Update states
-            self.U_x += U_x_dot * dt
             self.U_y += U_y_dot * dt
             self.r += r_dot * dt
-            self.s += s_dot * dt
             self.e += e_dot * dt
             self.delta_psi += delta_psi_dot * dt
 
@@ -132,12 +131,15 @@ class Entity:
             new_center = self.center + (self.velocity + new_velocity) * dt / 2.
 
             '''
-
-            self.center = new_center
-            self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
-            self.velocity = new_velocity
-            self.acceleration = new_acceleration
-            self.angular_velocity = new_angular_velocity
+            opt_traj = self.traj_handler.get_optimal_trajectory()
+            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
+            # self.center = self.center + Point(0, 1) # new_center
+            self.center = Point(opt_x, opt_y)
+            self.heading = np.mod(opt_heading, 2*np.pi)
+            # self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
+            # self.velocity = new_velocity
+            # self.acceleration = new_acceleration
+            # self.angular_velocity = new_angular_velocity
 
             self.buildGeometry()
 

@@ -7,20 +7,7 @@ from .world import World
 from .agents import Car, RectangleBuilding, Pedestrian, Painting, IcePatch, Asphalt
 from .geometry import Point
 from .graphics import Text, Point as pnt  # very unfortunate indeed
-
-
-# Important settings for the map
-MAP_WIDTH = 100  # 80
-MAP_HEIGHT = 100  # 120
-LANE_WIDTH = 8  # 4.4
-INITIAL_VELOCITY = 3
-DELTA_T = 0.1
-SIDEWALK_WIDTH = 2.0
-LANE_MARKER_HEIGHT = 3.8
-LANE_MARKER_WIDTH = 0.5
-BUILDING_WIDTH = (MAP_WIDTH - 2*SIDEWALK_WIDTH - 2*LANE_WIDTH - LANE_MARKER_WIDTH) / 2.
-TOP_BUILDING_HEIGHT = MAP_HEIGHT - (LANE_MARKER_WIDTH/2. + LANE_WIDTH + SIDEWALK_WIDTH)  # intersection_y will be subtracted
-BOTTOM_BUILDING_HEIGHT = -LANE_MARKER_WIDTH/2. - LANE_WIDTH - SIDEWALK_WIDTH  # intersection_y will be added
+from world_constants import *
 
 PPM = 5  # 5  # pixels per meter
 
@@ -74,7 +61,8 @@ class IntersectionScenario(gym.Env):
         self.world.add(Asphalt(Point(icex1 + icewidth / 2 + width2 / 2, icey1), Point(width2, MAP_HEIGHT)))  # Right
 
         # Ice patch
-        self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
+        self.world.add(Asphalt(Point(icex1, icey1), Point(icewidth, iceheigth)))
+        # self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
 
         # Pretty things on the side of the road
         self.world.add(Painting(Point(MAP_WIDTH - BUILDING_WIDTH/2., MAP_HEIGHT - (TOP_BUILDING_HEIGHT-self.intersection_y)/2.), Point(BUILDING_WIDTH+2*SIDEWALK_WIDTH, TOP_BUILDING_HEIGHT-self.intersection_y+2*SIDEWALK_WIDTH), 'gray64'))
@@ -108,11 +96,11 @@ class IntersectionScenario(gym.Env):
     def close(self):
         self.world.close()
 
-    @property
-    def observation_space(self):
-        low = np.array([0, 0, self.ego.min_speed, 0, MAP_HEIGHT/4.])
-        high = np.array([MAP_WIDTH, MAP_HEIGHT, self.ego.max_speed, 2*np.pi, MAP_HEIGHT*3./4.])
-        return Box(low=low, high=high)
+    # @property
+    # def observation_space(self):
+    #     low = np.array([0, 0, self.ego.min_speed, 0, MAP_HEIGHT/4.])
+    #     high = np.array([MAP_WIDTH, MAP_HEIGHT, self.ego.max_speed, 2*np.pi, MAP_HEIGHT*3./4.])
+    #     return Box(low=low, high=high)
 
     @property
     def action_space(self):
@@ -138,7 +126,7 @@ class IntersectionScenario(gym.Env):
                 BUILDING_WIDTH < self.ego.x < MAP_WIDTH - BUILDING_WIDTH
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        # action = np.clip(action, self.action_space.low, self.action_space.high)
         self.ego.set_control(action[0], action[1])
         self.world.tick()
 
@@ -157,10 +145,9 @@ class IntersectionScenario(gym.Env):
     def _get_obs(self):
         """
         Returns observation:
-        Agent x, y, speed, heading
-        and location of intersection (on the y-axis)
+
         """
-        return np.array([self.ego.center.x, self.ego.center.y, self.ego.speed, self.ego.heading, self.intersection_y])
+        return np.array([self.ego.U_y, self.ego.r, self.ego.e, self.ego.delta_psi, self.ego.center.x, self.ego.center.y, self.ego.heading])
 
     def render(self, mode='rgb'):
         self.world.render()
