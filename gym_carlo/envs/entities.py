@@ -72,6 +72,19 @@ class Entity:
             speed = self.speed
             heading = self.heading
 
+            # lr = self.rear_dist
+            # lf = lr  # we assume the center of mass is the same as the geometric center of the entity
+            beta = np.arctan(self.b / (self.a + self.b) * np.tan(self.inputSteering))
+            #
+            # new_angular_velocity = speed * self.inputSteering  # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
+            # new_acceleration = self.inputAcceleration - self.friction
+            # new_speed = np.clip(speed + new_acceleration * dt, self.min_speed, self.max_speed)
+            new_heading = heading + (speed/self.b)*np.sin(beta)*dt/2.
+            angle = (heading + new_heading)/2. + beta
+            new_center = self.center + (speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
+            # new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
+
+            # BACKUP
             # Kinematic bicycle model dynamics based on
             # "Kinematic and Dynamic Vehicle Models for Autonomous Driving Control Design" by
             # Jason Kong, Mark Pfeiffer, Georg Schildbach, Francesco Borrelli
@@ -90,9 +103,12 @@ class Entity:
             """
             New approach
             """
+            opt_traj = self.traj_handler.get_optimal_trajectory()
+            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
+
             delta = self.inputSteering
 
-            kappa = self.traj_handler.get_kappa()
+            kappa = self.traj_handler.get_kappa(future_steps=0)
             U_x = self.traj_handler.get_U_x()
 
             state = np.array([self.U_y, self.r, self.e, self.delta_psi])
@@ -111,7 +127,8 @@ class Entity:
             self.e += e_dot * dt
             self.delta_psi += delta_psi_dot * dt
 
-            # update self.center
+            # update x, y, heading
+            new_heading = opt_heading + self.delta_psi
 
 
             '''
@@ -131,11 +148,12 @@ class Entity:
             new_center = self.center + (self.velocity + new_velocity) * dt / 2.
 
             '''
-            opt_traj = self.traj_handler.get_optimal_trajectory()
-            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
-            # self.center = self.center + Point(0, 1) # new_center
-            self.center = Point(opt_x, opt_y)
-            self.heading = np.mod(opt_heading, 2*np.pi)
+            self.center = new_center
+            # self.center = Point(opt_x, opt_y)
+            self.heading = np.mod(new_heading, 2*np.pi)
+
+            # BACKUP
+            # self.center = new_center
             # self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
             # self.velocity = new_velocity
             # self.acceleration = new_acceleration

@@ -22,26 +22,27 @@ b = 1.15  # Distance to rear axis from center of mass (m)
 # linearized version of the fiala tire model
 # returns force and gradient at given alpha
 def linear_fiala(alpha, road_type):
+    scale_factor = 1  # kN
     if road_type == "asphalt":
         if alpha < -6:
-            return 8*1000, 0
+            return 8*scale_factor, 0
         elif alpha > 6:
-            return -8*1000, 0
+            return -8*scale_factor, 0
         else:
-            return - 1.33 * alpha * 1000, -1.33
+            return - 1.33 * alpha*scale_factor, -1.33
     elif road_type == "ice":
         if alpha < -1:
-            return 1*1000, 0
+            return 1*scale_factor, 0
         elif alpha > 1:
-            return -1*1000, 0
+            return -1*scale_factor, 0
         else:
-            return - alpha * 1000, -1.
+            return - alpha*scale_factor, -1.
 
 
 def get_tire_angles(U_x, U_y, r, delta):
     angle_f = np.arctan2((U_y + a*r), U_x) - delta
     angle_r = np.arctan2((U_y - b*r), U_x)
-    return np.degrees(angle_f), np.degrees(angle_r)
+    return angle_f, angle_r # np.degrees(angle_f), np.degrees(angle_r)
 
 
 def true_dynamics(state, control, Ux, kappa, road_type):

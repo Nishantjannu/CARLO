@@ -55,13 +55,8 @@ class MPC:
                 "state": prev_x_sol[:, k],
                 "control": prev_controls[:, k],
             }
-            A, B, C = linear_dynamics(prev_vals, self.traj_handler.get_U_x(), self.traj_handler.get_kappa(), "asphalt")
-            # Q, R, v, W = self.create_cost_matrices(u[:,k], u[:,k-1])
-            Q = np.zeros((self.sdim, self.sdim))
-            Q[2, 2] = 1
-            Q[3, 3] = 1
-
-            # R = [self.R_val]
+            A, B, C = linear_dynamics(prev_vals, self.traj_handler.get_U_x(), self.traj_handler.get_kappa(k), "asphalt")
+            Q, R, v, W = self.create_cost_matrices(u[:,k], u[:,k-1])
 
             # Add costs
             cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx
@@ -71,9 +66,9 @@ class MPC:
             # print("shape of x:", x[:, k].shape, "shape of A", A.shape, "shape of B", B.shape, "shape of u", u[:,k].shape, "shape of C", C.shape)
 
             # TODO multiply by delta t here
-            constraints += [x[:,k+1] == A@x[:,k] + B*u[:,k] + C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
-            #constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
-            #constraints += [-self.slew_rate_max <= v, v <= self.steering_max] # Constraints for the control signal
+            constraints += [x[:,k+1] == x[:, k] + self.delta_t*A@x[:,k] + self.delta_t*B*u[:,k] + self.delta_t*C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
+            # constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
+            # constraints += [-self.slew_rate_max <= v, v <= self.steering_max] # Constraints for the control signal
             # TODO add constraint depending on the friction environment
 
         cost += cp.quad_form(x[:, self.pred_horizon], QN)

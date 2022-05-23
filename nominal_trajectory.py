@@ -41,20 +41,21 @@ class Nominal_Trajectory_Handler:
     def reset_index(self):
         Nominal_Trajectory_Handler.current_index = 0
 
-    def get_segment(self):
+    def get_segment(self, future_steps=0):
         """
         Returns segment 1,2 or 3 depending on the static index
         """
         # TODO think about edge cases(?)
-        if Nominal_Trajectory_Handler.current_index < self.n_seg1:
+        ind = Nominal_Trajectory_Handler.current_index+future_steps
+        if ind < self.n_seg1:
             return 1
-        elif self.n_seg1 <= Nominal_Trajectory_Handler.current_index < self.n_seg1+self.n_seg2:
+        elif self.n_seg1 <= ind < self.n_seg1+self.n_seg2:
             return 2
         else:
             return 3
 
-    def get_kappa(self):
-        seg = self.get_segment()
+    def get_kappa(self, future_steps):
+        seg = self.get_segment(future_steps)
         if seg == 1 or seg == 3:
             return 0
         else:
