@@ -7,6 +7,7 @@ import argparse
 from gym_carlo.envs.interactive_controllers import GoalController
 from utils_new import *
 from mpc import MPC
+from nominal_trajectory import Nominal_Trajectory_Handler
 
 # TODO change the way these are accessed/set
 from gym_carlo.envs.intersection_scenario import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
@@ -38,7 +39,8 @@ if __name__ == '__main__':
     parser.add_argument('--goal', type=str, help="left, straight, right", default="all")
     parser.add_argument("--visualize", action="store_true", default=False)
     args = parser.parse_args()
-    controller = MPC()
+    trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
+    mpc_controller = MPC(pred_horizon=5, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -47,11 +49,13 @@ if __name__ == '__main__':
         goal_id = np.argwhere(np.array(goals[scenario_name]) == args.goal.lower())[0, 0]  # hmm, unreadable
     env = gym.make(scenario_name + 'Scenario-v0', goal=goal_id)
 
-
-    opt_traj = optimal_trajectory(MAP_HEIGHT, MAP_WIDTH, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T)
-    # Debug
+    trajectory_handler.reset_index()
+    opt_traj = trajectory_handler.get_optimal_trajectory()
+    # Debug:
     # np.set_printoptions(threshold=sys.maxsize)
     # print(opt_traj)
+    prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
+    prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
 
     episode_number = 10 if args.visualize else 100
     success_counter = 0
@@ -69,22 +73,21 @@ if __name__ == '__main__':
         iteration = 0
         while not done:
             t = time.time()
-            # obs = np.array(obs).reshape(1, -1)
-            u = controller_mapping(scenario_name, interactive_policy.control) if args.visualize else goal_id  # What does this do..?
 
-            print("obs, obs.shape:", obs, obs.shape)
-            x, y, heading = obs[0], obs[1], obs[3]
+            x, y, heading = obs[0], obs[1], obs[3]  # will also return r and U_y
             curr_pos = (x, y, heading)
-            e, delta_psi = calc_offset(opt_traj, curr_pos, MAP_HEIGHT, MAP_WIDTH, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T, iteration)
-            action = simple_controller_1(delta_psi)
-            print("delta_psi:", delta_psi, "action", action)
-
+            e, delta_psi = trajectory_handler.calc_offset(opt_traj, curr_pos)
+            # action = simple_controller_1(delta_psi)
             # action = take_action_placeholder(obs)
-            # action, _ = controller.calculate_control(obs)
+            # Input to MPC-controler: [U_y, r, delta_psi, e]
+            curr_state = np.array([0, 0, delta_psi, e])
+            prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
+            u0 = prev_controls[0]
+            action = [0, u0]  # 0 acceleration, u0 as steering
             obs, _, done, _ = env.step(action)
 
 
-            iteration += 1
+            trajectory_handler.increment_current_index()
 
             if args.visualize:
                 env.render()

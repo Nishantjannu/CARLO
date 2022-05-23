@@ -1,5 +1,5 @@
 """
-General Model Predictive Control
+Vanilla Model Predictive Control
 
 Author: Albin Mosskull
 04-20-2022
@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cvxpy as cp
 
+from dynamics import linear_dynamics
+from nominal_trajectory import Nominal_Trajectory_Handler
 
 
 class MPC:
@@ -16,61 +18,63 @@ class MPC:
     Vanilla MPC class
 
     # State #
-    x = [x_nom, x_c].T
-    x_nom = x_c = [U_y, r, delta_psi, e]
+    x = [U_y, r, delta_psi, e]
     U_y is the lateral speed
     r is the yaw rate
     delta_psi is the heading angle error
     e is the lateral error from the path
     """
-    def __init__(self, pred_horizon=20):
+    def __init__(self, pred_horizon, traj_handler):
         self.pred_horizon = pred_horizon
         self.sdim = 4  # We have 4 state variables
         self.adim = 1
         self.R_val = 0.01
-        self.W = 50
+        self.W_val = 50
         self.steering_max = np.pi / 2  # Todo update
         self.slew_rate_max = 20  # Todo update
+        self.traj_handler = traj_handler
 
-
-    def calculate_control(x0):
+    def calculate_control(self, x0, prev_x_sol, prev_controls):
         """
         x0 is the initial state, shape (4, 1)
+        prev_x_sol is the previous MPC solution, that we use to find the linearized dynamics matrices
+            (shape 4, self.pred_horizon)
         """
         # Create optimization variables.
-        u = cp.Variable((self.adim, PREDICTION_HORIZON))
-        x = cp.Variable((self.sdim, PREDICTION_HORIZON+1))
+        u = cp.Variable((self.adim, self.pred_horizon))
+        x = cp.Variable((self.sdim, self.pred_horizon+1))
 
-        QN = create_terminal_Q()
-        x_ref = np.zeros((sdim, 1))
+        QN = self.create_terminal_Q()
+        x_ref = np.zeros((self.sdim, 1))
 
         constraints = [x[:,0] == x0] # First constraints needs to be the initial state
         cost = 0.0
-        for k in range(PREDICTION_HORIZON):
+        for k in range(self.pred_horizon):
             # Retrieve the dynamics and cost matrices for the current iteration
-            Ad, Bd, Dd = create_matrices_linear(x[:,k])  # x[:, k] is the past state
-            Q, R, v, W = create_cost_matrices(u[k], u[k-1])
+            state = np.zeros(4)
+            print("state:", state)
+            (A, B, C), (Fy_r, Fy_f) = linear_dynamics(state, prev_x_sol[:, k], prev_controls[:, k], self.traj_handler.get_kappa())  # TODO change the first input
+            Q, R, v, W = self.create_cost_matrices(u[:,k], u[:,k-1])
 
             # Add costs
-            cost += cp.quad_form(x[:,k] - xref, Q) + cp.quad_form(u[k], R)    # Add the cost function sum(x^TQx + u^TRu)
+            cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx
+            # cost += u[:,k]*R*u[:,k] # cp.quad_form(u[k], R)    # Add the cost u^TRu
 
             # Add constraints
-            constraints += [x[:,k+1] == Ad@x[:,k] + Bd@u[k] + Dd]             # Add the system dynamics x(k+1) = Ad*x(k) + Bd*u(k) + Dd
-            constraints += [-self.steering_max <= u[k], u[k] <= self.steering_max] # Constraints for the control signal
-            constraints += [-self.slew_rate_max <= v[k], v[k] <= self.steering_max] # Constraints for the control signal
+            # print("shape of x:", x[:, k].shape, "shape of A", A.shape, "shape of B", B.shape, "shape of u", u[:,k].shape, "shape of C", C.shape)
+            constraints += [x[:,k+1] == A@x[:,k] + B*u[:,k] + C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
+            constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
+            constraints += [-self.slew_rate_max <= v, v <= self.steering_max] # Constraints for the control signal
+            # TODO add constraint depending on the friction environment
 
-        cost += cp.quad_form(x[:, PREDICTION_HORIZON] - xref, QN)
+        cost += cp.quad_form(x[:, self.pred_horizon], QN)
 
         # Form and solve problem.
         prob = cp.Problem(cp.Minimize(cost), constraints)
         sol = prob.solve(solver=cp.ECOS)
         # warnings.filterwarnings("ignore")
-        return u[0].value, x.value
+        return u.value, x.value
 
-
-    def create_linear_dynamic_matrices(self, x):
-        raise NotImplementedError
-        # return A, B, D
 
 
     def create_terminal_Q(self):
