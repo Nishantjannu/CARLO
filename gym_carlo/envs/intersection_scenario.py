@@ -7,7 +7,7 @@ from .world import World
 from .agents import Car, RectangleBuilding, Pedestrian, Painting, IcePatch, Asphalt
 from .geometry import Point
 from .graphics import Text, Point as pnt  # very unfortunate indeed
-from world_constants import *
+from constants import *
 
 PPM = 5  # 5  # pixels per meter
 
@@ -19,7 +19,8 @@ class IntersectionScenario(gym.Env):
 
         self.active_goal = goal
 
-        self.init_ego = Car(Point(MAP_WIDTH/2, 0), heading=np.pi/2)  # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
+        # TEMP CHANGE -10
+        self.init_ego = Car(Point(MAP_WIDTH/2-10, 0), heading=np.pi/2)  # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
         self.init_ego.velocity = Point(1., 0.)
         self.init_ego.min_speed = 0.
         self.init_ego.max_speed = 20.

@@ -10,8 +10,7 @@ from utils_new import *
 from mpc import MPC
 from nominal_trajectory import Nominal_Trajectory_Handler
 
-# TODO change the way these are accessed/set
-from world_constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
+from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
 
 
 def controller_mapping(scenario_name, control):
@@ -55,12 +54,11 @@ if __name__ == '__main__':
 
     plt.figure()
     x, y = opt_traj[:, 0], opt_traj[:, 1]
-    print("xshape", x.shape, "yshape", y.shape)
-    plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
-    plt.xlim([0, MAP_WIDTH])
-    plt.ylim([0, MAP_HEIGHT])
-    plt.legend()
-    plt.show()
+    # plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
+    # plt.xlim([0, MAP_WIDTH])
+    # plt.ylim([0, MAP_HEIGHT])
+    # plt.legend()
+    # plt.show()
     # Debug:
     # np.set_printoptions(threshold=sys.maxsize)
     # print(opt_traj)
@@ -96,27 +94,28 @@ if __name__ == '__main__':
             curr_state = np.array([U_y, r, e, delta_psi])
             print("current state:", curr_state)
 
-            prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
-            u0 = prev_controls[:, 0][0]
+            # prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
+            # u0 = prev_controls[:, 0][0]
+            u0 = 0
             print("Control u0:", u0)
             #print("u0:", u0)
-            action = [u0, 0]  # 0 acceleration, u0 as steering
+            action = [u0, 0]  # u0 as steering, 0 acceleration
             obs, _, done, _ = env.step(action)
 
             # print("opt_traj[:, 0:2].shape", opt_traj[:, 0:2].shape)
             # env.world.visualizer.draw_points(opt.traj[:, 0:2])
 
-            plt.subplot(2, 1, 1)
-            plt.plot(prev_state_traj[:, 0], label="planned U_y")
-            plt.plot(prev_state_traj[:, 1], label="planned r")
-            plt.plot(prev_state_traj[:, 2], label="planned e")
-            plt.plot(prev_state_traj[:, 3], label="planned delta_psi")
-            plt.legend()
-            plt.subplot(2, 1, 2)
-            print("xshape", x.shape, "yshape", y.shape)
-            plt.plot(prev_controls, "-o", label="Controls over the horizon")
-            plt.legend()
-            plt.show()
+            # plt.subplot(2, 1, 1)
+            # plt.plot(prev_state_traj[:, 0], label="planned U_y")
+            # plt.plot(prev_state_traj[:, 1], label="planned r")
+            # plt.plot(prev_state_traj[:, 2], label="planned e")
+            # plt.plot(prev_state_traj[:, 3], label="planned delta_psi")
+            # plt.legend()
+            # plt.subplot(2, 1, 2)
+            # print("xshape", x.shape, "yshape", y.shape)
+            # plt.plot(prev_controls, "-o", label="Controls over the horizon")
+            # plt.legend()
+            # plt.show()
 
             trajectory_handler.increment_current_index()
 

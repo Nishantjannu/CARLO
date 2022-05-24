@@ -5,7 +5,7 @@ import copy
 
 from dynamics import true_dynamics
 from nominal_trajectory import Nominal_Trajectory_Handler
-from world_constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
+from constants import *
 
 
 class Entity:
@@ -35,10 +35,10 @@ class Entity:
             # Other constants that we need TODO add these as input (in agents.py)
             # From Model Predictive Control for Vehicle Stabilization at the Limits of handling
             # by Craig Earl Beal and J. Christian Gerdes
-            self.m = 1724  # Mass of vehicle
-            self.Iz = 2600  # Yaw inertial of vehicle
-            self.a = 1.35  # Distance to front axis from center of mass
-            self.b = 1.15  # Distance to rear axis from center of mass
+            self.m = CAR_MASS  # Mass of vehicle
+            self.Iz = CAR_YAW_INERTIAL  # Yaw inertial of vehicle
+            self.a = CAR_FRONT_AXIS_DIST  # Distance to front axis from center of mass
+            self.b = CAR_BACK_AXIS_DIST  # Distance to rear axis from center of mass
 
             self.traj_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
 
@@ -93,7 +93,7 @@ class Entity:
             """
             delta = self.inputSteering
 
-            kappa = self.traj_handler.get_kappa()
+            kappa = self.traj_handler.get_kappa(0)
             U_x = self.traj_handler.get_U_x()
 
             state = np.array([self.U_y, self.r, self.e, self.delta_psi])
@@ -109,11 +109,11 @@ class Entity:
             # Update states
             self.U_y += U_y_dot * dt
             self.r += r_dot * dt
+            e_prev = self.e
             self.e += e_dot * dt
             self.delta_psi += delta_psi_dot * dt
             s_prev = self.s
             self.s += s_dot * dt
-            # update self.center
 
 
             '''
@@ -137,13 +137,13 @@ class Entity:
             opt_traj = self.traj_handler.get_optimal_trajectory()
             opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
             # opt_x_next, opt_y_next, opt_heading_next = self.traj_handler.get_next_optimal_pose(opt_traj)
-            
+
             s_cap, e_cap = np.array([np.cos(opt_heading), np.sin(opt_heading)]), np.array([-np.sin(opt_heading), np.cos(opt_heading)])
 
-            actual_pos = np.array([opt_x, opt_y]) + (self.s - s_prev) * s_cap + self.e * e_cap
+            actual_pos = np.array([self.center.x, self.center.y]) + (self.s - s_prev) * s_cap + (self.e - e_prev) * e_cap
             actual_heading = np.mod(opt_heading + self.delta_psi, 2*np.pi)
 
-            self.center = Point(actual_pos[0], actual_pos[1]) 
+            self.center = Point(actual_pos[0], actual_pos[1])
             self.heading = actual_heading
             # self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
             # self.velocity = new_velocity

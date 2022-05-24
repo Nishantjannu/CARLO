@@ -11,7 +11,7 @@ import cvxpy as cp
 
 from dynamics import linear_dynamics
 from nominal_trajectory import Nominal_Trajectory_Handler
-from world_constants import DELTA_T
+from constants import DELTA_T
 
 
 class MPC:

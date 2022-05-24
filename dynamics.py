@@ -12,17 +12,17 @@ state = [U_y, r, delta_psi, e]
 """
 
 import numpy as np
+from constants import *
 
-# TODO store these in a better place!!!!
-m = 1724  # Mass of vehicle (kg)
-Iz = 1100  # Yaw inertial of vehicle (m^-2)
-a = 1.35  # Distance to front axis from center of mass (m)
-b = 1.15  # Distance to rear axis from center of mass (m)
+m = CAR_MASS
+Iz = CAR_YAW_INERTIAL
+a = CAR_FRONT_AXIS_DIST
+b = CAR_BACK_AXIS_DIST
 
 # linearized version of the fiala tire model
 # returns force and gradient at given alpha
 def linear_fiala(alpha, road_type):
-    scale_factor = 1  # kN
+    scale_factor = 1000  # kN
     if road_type == "asphalt":
         if alpha < -6:
             return 8*scale_factor, 0
@@ -42,7 +42,8 @@ def linear_fiala(alpha, road_type):
 def get_tire_angles(U_x, U_y, r, delta):
     angle_f = np.arctan2((U_y + a*r), U_x) - delta
     angle_r = np.arctan2((U_y - b*r), U_x)
-    return angle_f, angle_r # np.degrees(angle_f), np.degrees(angle_r)
+    return np.degrees(angle_f), np.degrees(angle_r)
+    # return angle_f, angle_r
 
 
 def true_dynamics(state, control, Ux, kappa, road_type):
@@ -57,8 +58,9 @@ def true_dynamics(state, control, Ux, kappa, road_type):
     r_dot = (a*fy_f - b * fy_r) / Iz
     e_dot = Uy + Ux * delta_psi
     delta_psi_dot = r - kappa*Ux
+    s_dot = Ux - Uy * delta_psi
 
-    f_true = np.array([U_y_dot, r_dot, e_dot, delta_psi_dot])
+    f_true = np.array([U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot])
 
     return f_true
 
