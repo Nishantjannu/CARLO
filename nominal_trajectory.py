@@ -73,25 +73,28 @@ class Nominal_Trajectory_Handler:
     def get_current_optimal_pose(self, opt_traj):
         return opt_traj[Nominal_Trajectory_Handler.current_index, :]
 
-
-    def get_x_y_from_state(self, e, e_prev, opt_traj):  # state should be true state? to find x. Could also do that calc in true dynamics
-        """
-
-        """
-        opt_x, opt_y, opt_heading = get_current_optimal_pose(opt_traj)
-        seg = self.get_segment()
-        delta_e = e-e_prev
-
-        if seg == 1:
-            x = opt_x + e_prev
-            # unit_step**2 = e**
-        elif seg == 2:
-            pass
-        elif seg == 3:
-            y = opt_y + e_prev
+    # def get_next_optimal_pose(self, opt_traj):
+    #     return opt_traj[Nominal_Trajectory_Handler.current_index + 1, :]
 
 
-        return x, y
+    # def get_x_y_from_state(self, e, e_prev, opt_traj):  # state should be true state? to find x. Could also do that calc in true dynamics
+    #     """
+
+    #     """
+    #     opt_x, opt_y, opt_heading = get_current_optimal_pose(opt_traj)
+    #     seg = self.get_segment()
+    #     delta_e = e-e_prev
+
+    #     if seg == 1:
+    #         x = opt_x + e_prev
+    #         # unit_step**2 = e**
+    #     elif seg == 2:
+    #         pass
+    #     elif seg == 3:
+    #         y = opt_y + e_prev
+
+
+    #     return x, y
 
 
     def get_optimal_trajectory(self):

@@ -30,12 +30,13 @@ class Entity:
             self.r = 0
             self.e = 0
             self.delta_psi = 0
+            self.s = 0
 
             # Other constants that we need TODO add these as input (in agents.py)
             # From Model Predictive Control for Vehicle Stabilization at the Limits of handling
             # by Craig Earl Beal and J. Christian Gerdes
             self.m = 1724  # Mass of vehicle
-            self.I_z = 1100  # Yaw inertial of vehicle
+            self.Iz = 2600  # Yaw inertial of vehicle
             self.a = 1.35  # Distance to front axis from center of mass
             self.b = 1.15  # Distance to rear axis from center of mass
 
@@ -72,19 +73,6 @@ class Entity:
             speed = self.speed
             heading = self.heading
 
-            # lr = self.rear_dist
-            # lf = lr  # we assume the center of mass is the same as the geometric center of the entity
-            beta = np.arctan(self.b / (self.a + self.b) * np.tan(self.inputSteering))
-            #
-            # new_angular_velocity = speed * self.inputSteering  # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
-            # new_acceleration = self.inputAcceleration - self.friction
-            # new_speed = np.clip(speed + new_acceleration * dt, self.min_speed, self.max_speed)
-            new_heading = heading + (speed/self.b)*np.sin(beta)*dt/2.
-            angle = (heading + new_heading)/2. + beta
-            new_center = self.center + (speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
-            # new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
-
-            # BACKUP
             # Kinematic bicycle model dynamics based on
             # "Kinematic and Dynamic Vehicle Models for Autonomous Driving Control Design" by
             # Jason Kong, Mark Pfeiffer, Georg Schildbach, Francesco Borrelli
@@ -103,12 +91,9 @@ class Entity:
             """
             New approach
             """
-            opt_traj = self.traj_handler.get_optimal_trajectory()
-            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
-
             delta = self.inputSteering
 
-            kappa = self.traj_handler.get_kappa(future_steps=0)
+            kappa = self.traj_handler.get_kappa()
             U_x = self.traj_handler.get_U_x()
 
             state = np.array([self.U_y, self.r, self.e, self.delta_psi])
@@ -119,16 +104,16 @@ class Entity:
             }
 
             f_true = true_dynamics(state, delta, U_x, kappa, road_types[friction])
-            U_y_dot, r_dot, e_dot, delta_psi_dot = f_true
+            U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot = f_true
 
             # Update states
             self.U_y += U_y_dot * dt
             self.r += r_dot * dt
             self.e += e_dot * dt
             self.delta_psi += delta_psi_dot * dt
-
-            # update x, y, heading
-            new_heading = opt_heading + self.delta_psi
+            s_prev = self.s
+            self.s += s_dot * dt
+            # update self.center
 
 
             '''
@@ -148,12 +133,18 @@ class Entity:
             new_center = self.center + (self.velocity + new_velocity) * dt / 2.
 
             '''
-            self.center = new_center
-            # self.center = Point(opt_x, opt_y)
-            self.heading = np.mod(new_heading, 2*np.pi)
 
-            # BACKUP
-            # self.center = new_center
+            opt_traj = self.traj_handler.get_optimal_trajectory()
+            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
+            # opt_x_next, opt_y_next, opt_heading_next = self.traj_handler.get_next_optimal_pose(opt_traj)
+            
+            s_cap, e_cap = np.array([np.cos(opt_heading), np.sin(opt_heading)]), np.array([-np.sin(opt_heading), np.cos(opt_heading)])
+
+            actual_pos = np.array([opt_x, opt_y]) + (self.s - s_prev) * s_cap + self.e * e_cap
+            actual_heading = np.mod(opt_heading + self.delta_psi, 2*np.pi)
+
+            self.center = Point(actual_pos[0], actual_pos[1]) 
+            self.heading = actual_heading
             # self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
             # self.velocity = new_velocity
             # self.acceleration = new_acceleration
