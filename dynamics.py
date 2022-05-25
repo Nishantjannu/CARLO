@@ -31,6 +31,7 @@ def linear_fiala(alpha, road_type):
         else:
             return - 1.33 * alpha*scale_factor, -1.33
     elif road_type == "ice":
+        print("found ice")
         if alpha < -1:
             return 1*scale_factor, 0
         elif alpha > 1:
@@ -40,7 +41,7 @@ def linear_fiala(alpha, road_type):
 
 
 def get_tire_angles(U_x, U_y, r, delta):
-    angle_f = np.arctan2((U_y + a*r), U_x) - delta
+    angle_f = np.arctan2((U_y + a*r), U_x) - np.deg2rad(delta)
     angle_r = np.arctan2((U_y - b*r), U_x)
     return np.degrees(angle_f), np.degrees(angle_r)
     # return angle_f, angle_r
@@ -50,12 +51,12 @@ def true_dynamics(state, control, Ux, kappa, road_type):
     Uy, r, e, delta_psi = state
 
     angle_f, angle_r = get_tire_angles(Ux, Uy, r, control)
-    fy_f, _ = linear_fiala(angle_r, road_type)
-    fy_r, _ = linear_fiala(angle_f, road_type)
+    fy_f, _ = linear_fiala(angle_f, road_type)
+    fy_r, _ = linear_fiala(angle_r, road_type)
 
     # dynamics equations
     U_y_dot = (fy_f + fy_r) / m - r*Ux
-    r_dot = (a*fy_f - b * fy_r) / Iz
+    r_dot = (a * fy_f - b * fy_r) / Iz
     e_dot = Uy + Ux * delta_psi
     delta_psi_dot = r - kappa*Ux
     s_dot = Ux - Uy * delta_psi

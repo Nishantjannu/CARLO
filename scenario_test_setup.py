@@ -52,16 +52,17 @@ if __name__ == '__main__':
     trajectory_handler.reset_index()
     opt_traj = trajectory_handler.get_optimal_trajectory()
 
+    ## Debug:
+    np.set_printoptions(threshold=sys.maxsize)
+    print(opt_traj)
     plt.figure()
     x, y = opt_traj[:, 0], opt_traj[:, 1]
-    # plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
-    # plt.xlim([0, MAP_WIDTH])
-    # plt.ylim([0, MAP_HEIGHT])
-    # plt.legend()
-    # plt.show()
-    # Debug:
-    # np.set_printoptions(threshold=sys.maxsize)
-    # print(opt_traj)
+    plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
+    plt.xlim([0, MAP_WIDTH])
+    plt.ylim([0, MAP_HEIGHT])
+    plt.legend()
+    plt.show()
+
     prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
     prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
 
@@ -94,9 +95,13 @@ if __name__ == '__main__':
             curr_state = np.array([U_y, r, e, delta_psi])
             print("current state:", curr_state)
 
-            # prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
-            # u0 = prev_controls[:, 0][0]
-            u0 = 0
+            prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
+            u0 = prev_controls[:, 0][0]
+            # u0 = 5
+            # if iteration >= 50:
+            #     u0 = 0
+            # iteration += 1
+
             print("Control u0:", u0)
             #print("u0:", u0)
             action = [u0, 0]  # u0 as steering, 0 acceleration

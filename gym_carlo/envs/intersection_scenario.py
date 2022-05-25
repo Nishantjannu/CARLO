@@ -19,8 +19,7 @@ class IntersectionScenario(gym.Env):
 
         self.active_goal = goal
 
-        # TEMP CHANGE -10
-        self.init_ego = Car(Point(MAP_WIDTH/2-10, 0), heading=np.pi/2)  # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
+        self.init_ego = Car(Point(MAP_WIDTH/2, 0), heading=np.pi/2)  # Car(Point(MAP_WIDTH/2. + LANE_MARKER_WIDTH/2. + LANE_WIDTH/2., 0), heading=np.pi/2)
         self.init_ego.velocity = Point(1., 0.)
         self.init_ego.min_speed = 0.
         self.init_ego.max_speed = 20.
@@ -62,8 +61,8 @@ class IntersectionScenario(gym.Env):
         self.world.add(Asphalt(Point(icex1 + icewidth / 2 + width2 / 2, icey1), Point(width2, MAP_HEIGHT)))  # Right
 
         # Ice patch
-        self.world.add(Asphalt(Point(icex1, icey1), Point(icewidth, iceheigth)))
-        # self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
+        # self.world.add(Asphalt(Point(icex1, icey1), Point(icewidth, iceheigth)))
+        self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
 
         # Pretty things on the side of the road
         self.world.add(Painting(Point(MAP_WIDTH - BUILDING_WIDTH/2., MAP_HEIGHT - (TOP_BUILDING_HEIGHT-self.intersection_y)/2.), Point(BUILDING_WIDTH+2*SIDEWALK_WIDTH, TOP_BUILDING_HEIGHT-self.intersection_y+2*SIDEWALK_WIDTH), 'gray64'))

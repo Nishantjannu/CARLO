@@ -19,17 +19,18 @@ class Nominal_Trajectory_Handler:
         self.map_height = map_height
         self.map_width = map_width
         self.lane_width = lane_width
-        self.unit_step =  velocity * delta_t
+        self.unit_step = velocity * delta_t
         self.velocity = velocity
 
         # Calculate the different segments of the road
         unit_step = self.velocity * delta_t
-        self.segment_1_length = map_height/2 - lane_width/2
+        self.segment_1_length = map_height/2 - lane_width
         self.n_seg1 = np.arange(0, self.segment_1_length, self.unit_step).shape[0]
-        self.segment_2_length = (2*np.pi*lane_width/2) / 4
+        self.segment_2_length = (2*np.pi*lane_width) / 4
         self.n_seg2 = int(self.segment_2_length / self.unit_step) + 1
-        self.segment_3_length = map_width/2 - lane_width/2
+        self.segment_3_length = map_width/2 - lane_width
         self.n_seg3 = np.arange(0, self.segment_3_length, self.unit_step).shape[0]
+        self.circle_center = np.array([self.map_width / 2 - self.lane_width, self.map_height/2 - self.lane_width])
 
     def increment_current_index(self):
         """
@@ -105,54 +106,92 @@ class Nominal_Trajectory_Handler:
         # TODO:
         - handle edge cases between the segments
         - look at if n_poses_i isnt an integer for any segment
+        - Add self.circle_rad as an attribute and replace self.lane_width almost everywhere
         """
         ### First segment, straight ###
         y_poses_1 = np.arange(0, self.segment_1_length, self.unit_step).reshape((-1, 1))
         x_poses_1 = np.ones((y_poses_1.shape[0], 1))*self.map_width/2
         angles_1 = np.ones((y_poses_1.shape[0], 1))*(np.pi/2)
-        # s = np.copy(y_poses_1)
 
         ### Second segment, circle ###
-        circle_center = np.array([self.map_width/2 + self.lane_width/2, self.map_height/2 - self.lane_width/2])  # from geometry of our right turn
-        r = self.lane_width/2
-        # s_current = s[-1]  # the distance travelled after segment 1
+        r = self.lane_width
         x_poses_2 = []
         y_poses_2 = []
         angles_2 = []
         for i in range(self.n_seg2):
             # Calculate poses across the arc
-            pos_ang = np.pi - ((np.pi/2) * i /self.n_seg2)
-            x_poses_2.append( circle_center[0] + r*np.cos(pos_ang) )
-            y_poses_2.append( circle_center[1] + r*np.sin(pos_ang) )
+            pos_ang = ((np.pi/2) * i /self.n_seg2)
+            x_poses_2.append( self.circle_center[0] + r*np.cos(pos_ang) )
+            y_poses_2.append( self.circle_center[1] + r*np.sin(pos_ang) )
 
             # Calculate heading angles across the arc
             steer_ang = (np.pi/2) - ((np.pi/2) * i / self.n_seg2)
             angles_2.append(steer_ang)
-
-            # Build s
-            # circ_arc_len = ((np.pi/2) /self.n_seg2) * r  # theta * r
-            # s_current += circ_arc_len
-            # s = np.append(s, s_current)
 
         x_poses_2 = np.array(x_poses_2).reshape((self.n_seg2, 1))
         y_poses_2 = np.array(y_poses_2).reshape((self.n_seg2, 1))
         angles_2 = np.array(angles_2).reshape((self.n_seg2, 1))
 
         ### Third segment, straight right ###
-        x_poses_3 = np.arange(self.map_width/2 + self.lane_width/2, self.map_width/2 + self.lane_width/2 + self.segment_3_length, self.unit_step).reshape(-1, 1)  # np.linspace(map_width/2 + lane_width/2, map_width/2 + lane_width/2 + segment_3_length, n_poses_3).reshape((n_poses_3, 1))
+        x_poses_3 = np.arange(self.map_width/2 - self.lane_width, 0, -self.unit_step).reshape(-1, 1)
         y_poses_3 = np.ones((x_poses_3.shape[0], 1))*self.map_height/2
         angles_3 = np.zeros((x_poses_3.shape[0], 1))
-
-        # Get final s and story it in the class
-        # steps_3 = np.arange(0, self.segment_3_length, self.unit_step)
-        # s = np.concatenate((s, np.add.accumulate(steps_3) + s_current))
-        # self.s = s
 
         # Merge these and return
         x_poses = np.vstack((x_poses_1, x_poses_2, x_poses_3))
         y_poses = np.vstack((y_poses_1, y_poses_2, y_poses_3))
         angles = np.vstack((angles_1, angles_2, angles_3))
         out = np.hstack((x_poses, y_poses, angles))
+
+        # ### RIGHT HAND TURN ###
+        # ### First segment, straight ###
+        # y_poses_1 = np.arange(0, self.segment_1_length, self.unit_step).reshape((-1, 1))
+        # x_poses_1 = np.ones((y_poses_1.shape[0], 1))*self.map_width/2
+        # angles_1 = np.ones((y_poses_1.shape[0], 1))*(np.pi/2)
+        # # s = np.copy(y_poses_1)
+        #
+        # ### Second segment, circle ###
+        # circle_center = np.array([self.map_width/2 + self.lane_width/2, self.map_height/2 - self.lane_width/2])  # from geometry of our right turn
+        # r = self.lane_width/2
+        # # s_current = s[-1]  # the distance travelled after segment 1
+        # x_poses_2 = []
+        # y_poses_2 = []
+        # angles_2 = []
+        # for i in range(self.n_seg2):
+        #     # Calculate poses across the arc
+        #     pos_ang = np.pi - ((np.pi/2) * i /self.n_seg2)
+        #     x_poses_2.append( circle_center[0] + r*np.cos(pos_ang) )
+        #     y_poses_2.append( circle_center[1] + r*np.sin(pos_ang) )
+        #
+        #     # Calculate heading angles across the arc
+        #     steer_ang = (np.pi/2) - ((np.pi/2) * i / self.n_seg2)
+        #     angles_2.append(steer_ang)
+        #
+        #     # Build s
+        #     # circ_arc_len = ((np.pi/2) /self.n_seg2) * r  # theta * r
+        #     # s_current += circ_arc_len
+        #     # s = np.append(s, s_current)
+        #
+        # x_poses_2 = np.array(x_poses_2).reshape((self.n_seg2, 1))
+        # y_poses_2 = np.array(y_poses_2).reshape((self.n_seg2, 1))
+        # angles_2 = np.array(angles_2).reshape((self.n_seg2, 1))
+        #
+        # ### Third segment, straight right ###
+        # x_poses_3 = np.arange(self.map_width/2 + self.lane_width/2, self.map_width/2 + self.lane_width/2 + self.segment_3_length, self.unit_step).reshape(-1, 1)  # np.linspace(map_width/2 + lane_width/2, map_width/2 + lane_width/2 + segment_3_length, n_poses_3).reshape((n_poses_3, 1))
+        # y_poses_3 = np.ones((x_poses_3.shape[0], 1))*self.map_height/2
+        # angles_3 = np.zeros((x_poses_3.shape[0], 1))
+        #
+        # # Get final s and story it in the class
+        # # steps_3 = np.arange(0, self.segment_3_length, self.unit_step)
+        # # s = np.concatenate((s, np.add.accumulate(steps_3) + s_current))
+        # # self.s = s
+        #
+        # # Merge these and return
+        # x_poses = np.vstack((x_poses_1, x_poses_2, x_poses_3))
+        # y_poses = np.vstack((y_poses_1, y_poses_2, y_poses_3))
+        # angles = np.vstack((angles_1, angles_2, angles_3))
+        # out = np.hstack((x_poses, y_poses, angles))
+
         return out
 
     def calc_offset(self, poses, curr_pose):  # poses could be stored in the class
@@ -182,9 +221,8 @@ class Nominal_Trajectory_Handler:
         if segment == 1:
             e = x - opt_x
         elif segment == 2:
-            circle_center = np.array([self.map_width / 2 + self.lane_width / 2, self.map_height/2 - self.lane_width/2])
-            r = np.sqrt((x-circle_center[0])**2 + (y-circle_center[1])**2)
-            r_opt = np.sqrt((opt_x-circle_center[0])**2 + (opt_y-circle_center[1])**2)
+            r = np.sqrt((x-self.circle_center[0])**2 + (y-self.circle_center[1])**2)
+            r_opt = np.sqrt((opt_x-self.circle_center[0])**2 + (opt_y-self.circle_center[1])**2)
             e = r - r_opt
         elif segment == 3:
             e = y - opt_y

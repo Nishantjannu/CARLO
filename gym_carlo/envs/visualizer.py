@@ -48,6 +48,20 @@ class Visualizer:
                 
         self.visualized_imgs = new_visualized_imgs
 
+    def draw_points(self, points, movable=True, rad=1):
+        """
+        Points: 2 x n_pts
+                [[x0,...,xn],
+                 [y0,...,yn]]
+        """
+        new_visualized_imgs = []
+        for pt_nr in range(points.shape[1]):
+            x, y = points[0, pt_nr], points[1, pt_nr]
+            img = Circle(Point(self.ppm*x, self.ppm*y), self.ppm*rad)
+            img.draw(self.win)
+            new_visualized_imgs.append({'movable': movable, 'graphis': img})
+        self.visualized_imgs += new_visualized_imgs
+
     def close(self):
         self.window_created = False
         self.win.close()

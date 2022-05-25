@@ -103,6 +103,9 @@ class Entity:
                 0.95: "asphalt"
             }
 
+            dist_travelled = DELTA_T * np.array([U_x*np.cos(self.heading) - self.U_y*np.sin(self.heading),
+                                                U_x*np.sin(self.heading) + self.U_y*np.cos(self.heading)])
+
             f_true = true_dynamics(state, delta, U_x, kappa, road_types[friction])
             U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot = f_true
 
@@ -138,10 +141,8 @@ class Entity:
             opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
             # opt_x_next, opt_y_next, opt_heading_next = self.traj_handler.get_next_optimal_pose(opt_traj)
 
-            s_cap, e_cap = np.array([np.cos(opt_heading), np.sin(opt_heading)]), np.array([-np.sin(opt_heading), np.cos(opt_heading)])
-
-            actual_pos = np.array([self.center.x, self.center.y]) + (self.s - s_prev) * s_cap + (self.e - e_prev) * e_cap
-            actual_heading = np.mod(opt_heading + self.delta_psi, 2*np.pi)
+            actual_pos = np.array([self.center.x, self.center.y]) + dist_travelled
+            actual_heading = np.mod(opt_heading - self.delta_psi, 2*np.pi)  # put + instead of minus for right hand turn
 
             self.center = Point(actual_pos[0], actual_pos[1])
             self.heading = actual_heading
