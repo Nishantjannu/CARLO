@@ -6,30 +6,30 @@ class Visualizer:
         # width (meters)
         # height (meters)
         # ppm is the number of pixels per meters
-        
+
         self.ppm = ppm
         self.display_width, self.display_height = int(width*ppm), int(height*ppm)
         self.window_created = False
         self.visualized_imgs = []
-        
-        
+
+
     def create_window(self, bg_color: str = 'gray80'):
         if not self.window_created or self.win.isClosed():
             self.win = GraphWin('CARLO', self.display_width, self.display_height)
             self.win.setBackground(bg_color)
             self.window_created = True
             self.visualized_imgs = []
-            
+
     def update_agents(self, agents: list):
         new_visualized_imgs = []
-        
+
         # Remove the movable agents from the window
         for imgItem in self.visualized_imgs:
             if imgItem['movable']:
                 imgItem['graphics'].undraw()
             else:
                 new_visualized_imgs.append({'movable': False, 'graphics': imgItem['graphics']})
-                
+
         # Add the updated movable agents (and the unmovable ones if they were not rendered before)
         for agent in agents:
             if agent.movable or not self.visualized_imgs:
@@ -45,21 +45,24 @@ class Visualizer:
                 img.setFill(agent.color)
                 img.draw(self.win)
                 new_visualized_imgs.append({'movable': agent.movable, 'graphics': img})
-                
+
         self.visualized_imgs = new_visualized_imgs
 
-    def draw_points(self, points, movable=True, rad=1):
+    def draw_points(self, points, movable=False, rad=1):
         """
         Points: 2 x n_pts
                 [[x0,...,xn],
                  [y0,...,yn]]
         """
         new_visualized_imgs = []
+        print("poitns shape", points.shape)
         for pt_nr in range(points.shape[1]):
-            x, y = points[0, pt_nr], points[1, pt_nr]
-            img = Circle(Point(self.ppm*x, self.ppm*y), self.ppm*rad)
+            # print("points[:, :]", points[pt_nr, :])
+            x, y = points[0, pt_nr, 0], points[1, pt_nr, 0]
+            img = Circle(Point(self.ppm*x, self.display_height - self.ppm*y), self.ppm*rad)
+            img.setFill('LightSalmon3')
             img.draw(self.win)
-            new_visualized_imgs.append({'movable': movable, 'graphis': img})
+            new_visualized_imgs.append({'movable': movable, 'graphics': img})
         self.visualized_imgs += new_visualized_imgs
 
     def close(self):

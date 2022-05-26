@@ -47,6 +47,34 @@ def get_tire_angles(U_x, U_y, r, delta):
     # return angle_f, angle_r
 
 
+def project_x_y(curr_x, curr_y, curr_heading, Ux, states):
+    """
+    Takes in states
+    4 x N
+    """
+    N = states.shape[1]
+    x_vec = np.zeros((N, 1))
+    y_vec = np.zeros((N, 1))
+    head_vec = np.zeros((N, 1))
+    U_y_vec, _, _, delta_psi_vec = states[0, :], states[1, :], states[2, :], states[3, :]
+    x = curr_x
+    y = curr_y
+    heading = curr_heading
+    for i in range(N):
+        U_y = U_y_vec[i]
+        delta_psi = delta_psi_vec[i]
+        dist_travelled = DELTA_T * np.array([Ux * np.cos(heading) - U_y * np.sin(heading),
+                                            Ux * np.sin(heading) + U_y * np.cos(heading)])
+        heading = np.mod(heading - delta_psi, 2*np.pi)
+        x += dist_travelled[0]
+        y += dist_travelled[1]
+
+        x_vec[i] = x
+        y_vec[i] = y
+        head_vec[i] = heading
+    return x_vec, y_vec, head_vec
+
+
 def true_dynamics(state, control, Ux, kappa, road_type):
     Uy, r, e, delta_psi = state
 

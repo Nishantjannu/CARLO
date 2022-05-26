@@ -11,6 +11,7 @@ from mpc import MPC
 from nominal_trajectory import Nominal_Trajectory_Handler
 
 from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
+from dynamics import project_x_y
 
 
 def controller_mapping(scenario_name, control):
@@ -40,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument("--visualize", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
-    mpc_controller = MPC(pred_horizon=20, traj_handler=trajectory_handler)
+    mpc_controller = MPC(pred_horizon=10, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -53,15 +54,15 @@ if __name__ == '__main__':
     opt_traj = trajectory_handler.get_optimal_trajectory()
 
     ## Debug:
-    np.set_printoptions(threshold=sys.maxsize)
-    print(opt_traj)
-    plt.figure()
-    x, y = opt_traj[:, 0], opt_traj[:, 1]
-    plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
-    plt.xlim([0, MAP_WIDTH])
-    plt.ylim([0, MAP_HEIGHT])
-    plt.legend()
-    plt.show()
+    # np.set_printoptions(threshold=sys.maxsize)
+    # print(opt_traj)
+    # plt.figure()
+    # x, y = opt_traj[:, 0], opt_traj[:, 1]
+    # plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
+    # plt.xlim([0, MAP_WIDTH])
+    # plt.ylim([0, MAP_HEIGHT])
+    # plt.legend()
+    # plt.show()
 
     prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
     prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
@@ -107,9 +108,8 @@ if __name__ == '__main__':
             action = [u0, 0]  # u0 as steering, 0 acceleration
             obs, _, done, _ = env.step(action)
 
-            # print("opt_traj[:, 0:2].shape", opt_traj[:, 0:2].shape)
-            # env.world.visualizer.draw_points(opt.traj[:, 0:2])
-
+            proj_x, proj_y, proj_head = project_x_y(env.ego.x, env.ego.y, env.ego.heading, trajectory_handler.get_U_x(), prev_state_traj)
+            env.world.visualizer.draw_points(np.array([proj_x, proj_y]))
             # plt.subplot(2, 1, 1)
             # plt.plot(prev_state_traj[:, 0], label="planned U_y")
             # plt.plot(prev_state_traj[:, 1], label="planned r")
@@ -126,7 +126,7 @@ if __name__ == '__main__':
 
             if args.visualize:
                 env.render()
-                while time.time() - t < env.dt/2:   # Temp * 10
+                while time.time() - t < env.dt*10/2:   # Temp * 10
                     pass  # runs 2x speed. This is not great, but time.sleep() causes problems with the interactive controller
             if done:
                 env.close()
