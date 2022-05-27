@@ -2,7 +2,7 @@
 MAP_WIDTH = 100  # 80
 MAP_HEIGHT = 100  # 120
 LANE_WIDTH = 16  # 4.4
-INITIAL_VELOCITY = 3 # 3
+INITIAL_VELOCITY = 10  # 3
 DELTA_T = 0.1
 SIDEWALK_WIDTH = 2.0
 LANE_MARKER_HEIGHT = 3.8
@@ -18,3 +18,6 @@ CAR_MASS = 1724  # Mass of vehicle
 CAR_YAW_INERTIAL = 2600  # Yaw inertial of vehicle
 CAR_FRONT_AXIS_DIST = 1.35  # Distance to front axis from center of mass
 CAR_BACK_AXIS_DIST = 1.15  # Distance to rear axis from center of mass
+
+FIXED_CONTROL = 1
+DEBUG_LINERIZED_DYNAMICS = 0

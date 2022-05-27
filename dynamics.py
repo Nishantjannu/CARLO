@@ -12,16 +12,21 @@ state = [U_y, r, delta_psi, e]
 """
 
 import numpy as np
+import matplotlib.pyplot as plt
 from constants import *
 
+# Assign values to the car's parameters based on the constants
 m = CAR_MASS
 Iz = CAR_YAW_INERTIAL
 a = CAR_FRONT_AXIS_DIST
 b = CAR_BACK_AXIS_DIST
 
-# linearized version of the fiala tire model
-# returns force and gradient at given alpha
+
 def linear_fiala(alpha, road_type):
+    """
+    linearized version of the fiala tire model
+    returns force and gradient at given alpha
+    """
     scale_factor = 1000  # kN
     if road_type == "asphalt":
         if alpha < -6:
@@ -29,22 +34,23 @@ def linear_fiala(alpha, road_type):
         elif alpha > 6:
             return -8*scale_factor, 0
         else:
-            return - 1.33 * alpha*scale_factor, -1.33
+            return - 1.33 * alpha*scale_factor, -1.33*scale_factor
     elif road_type == "ice":
-        print("found ice")
         if alpha < -1:
             return 1*scale_factor, 0
         elif alpha > 1:
             return -1*scale_factor, 0
         else:
-            return - alpha*scale_factor, -1.
+            return - alpha*scale_factor, -1.*scale_factor
 
 
 def get_tire_angles(U_x, U_y, r, delta):
+    """
+    Assumes delta in degrees
+    """
     angle_f = np.arctan2((U_y + a*r), U_x) - np.deg2rad(delta)
     angle_r = np.arctan2((U_y - b*r), U_x)
     return np.degrees(angle_f), np.degrees(angle_r)
-    # return angle_f, angle_r
 
 
 def calculate_x_y_pos(curr_x, curr_y, curr_heading, opt_headings, Ux, states):
@@ -54,7 +60,7 @@ def calculate_x_y_pos(curr_x, curr_y, curr_heading, opt_headings, Ux, states):
     r
     e
     delta_psi]
-    delta_psis need to be shifted one value into the future
+    delta_psis need to be shifted one value into the future due to how x and y are updated
 
     N is automatically assumed as the horizon for how far to project the x and y.
 
@@ -94,6 +100,8 @@ def true_dynamics(state, control, Ux, kappa, road_type):
     angle_f, angle_r = get_tire_angles(Ux, Uy, r, control)
     fy_f, _ = linear_fiala(angle_f, road_type)
     fy_r, _ = linear_fiala(angle_r, road_type)
+    print("True dynamics: fy_f, fy_r:", fy_f, fy_r)
+    print("Uy:", Uy, "r", r)
 
     # dynamics equations
     U_y_dot = (fy_f + fy_r) / m - r*Ux
@@ -113,7 +121,6 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
     # extract previous values
     Uyo, ro, _, _  = prev_values["state"]
     uo = prev_values["control"]
-    print("uo:", uo)
 
 
     ############ LINEARIZATION ################
@@ -123,6 +130,7 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
     fy_f_bar, cf = linear_fiala(alpha_f_bar, road_type)
     fy_r_bar, cr = linear_fiala(alpha_r_bar, road_type)
     print("Linear dynamics: fy_f, fy_r:", fy_f_bar, fy_r_bar)
+    print("Uy:", Uyo, "r", ro)
 
     A_Uy = np.array([(cf + cr)/ (m*Ux), (cf*a - cr*b)/ (m*Ux) - Ux, 0, 0 ])
     B_Uy = - cf/m
@@ -145,3 +153,19 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
     C = np.array([C_Uy, C_r, C_e, C_psi])
 
     return (A, B, C)
+
+
+if __name__ == "__main__":
+    x = np.arange(-20, 20, 0.1)
+    y_asph = np.zeros_like(x)
+    y_ice = np.zeros_like(x)
+    for i in range(x.shape[0]):
+        y_asph[i], _ = linear_fiala(x[i], "asphalt")
+        y_ice[i], _ = linear_fiala(x[i], "ice")
+
+    plt.figure()
+    plt.plot(x, y_asph, label="Asphalt")
+    plt.plot(x, y_ice, label="Ice")
+    plt.legend()
+    plt.show()
+

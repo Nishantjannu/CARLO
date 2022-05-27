@@ -33,7 +33,7 @@ class MPC:
         self.delta_t = DELTA_T
         self.W_val = 50
         self.steering_max = 5
-        self.slew_rate_max = 0.1
+        self.slew_rate_max = 0.5
         self.traj_handler = traj_handler
 
     def calculate_control(self, x0, prev_x_sol, prev_controls):
@@ -97,3 +97,31 @@ class MPC:
 
         W = self.W_val
         return Q, R, v, W
+
+
+class Contigency_MPC:
+    """
+    Contigency MPC class
+    - inherit from common MPC class? Or write some duplicate code
+
+    # State #
+    [x_nom, x_c]
+    x_nom = x_c = [U_y, r, delta_psi, e]
+    U_y is the lateral speed
+    r is the yaw rate
+    delta_psi is the heading angle error
+    e is the lateral error from the path
+
+    Crucial compared to the nominal MPC is the duplicate state space, and that the first actions are enforced to be the same
+    """
+    def __init__(self, pred_horizon, traj_handler):
+        self.pred_horizon = pred_horizon
+        self.sdim = 8
+        self.adim = 2
+        self.R_val = 0.01
+        self.delta_t = DELTA_T
+        self.W_val = 50
+        self.steering_max = 5
+        self.slew_rate_max = 0.1
+        self.traj_handler = traj_handler
+

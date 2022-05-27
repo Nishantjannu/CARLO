@@ -24,13 +24,14 @@ class Nominal_Trajectory_Handler:
 
         # Calculate the different segments of the road
         unit_step = self.velocity * delta_t
-        self.segment_1_length = map_height/2 - lane_width
+        self.radius = lane_width
+        self.segment_1_length = map_height/2 - self.radius
         self.n_seg1 = np.arange(0, self.segment_1_length, self.unit_step).shape[0]
-        self.segment_2_length = (2*lane_width*np.pi) / 4
+        self.segment_2_length = (2*self.radius*np.pi) / 4
         self.n_seg2 = int(self.segment_2_length / self.unit_step) + 1
-        self.segment_3_length = map_width/2 - lane_width
+        self.segment_3_length = map_width/2 - self.radius
         self.n_seg3 = np.arange(0, self.segment_3_length, self.unit_step).shape[0]
-        self.circle_center = np.array([self.map_width / 2 - self.lane_width, self.map_height/2 - self.lane_width])
+        self.circle_center = np.array([self.map_width / 2 - self.radius, self.map_height/2 - self.radius])
 
     def increment_current_index(self):
         """
@@ -60,7 +61,7 @@ class Nominal_Trajectory_Handler:
         if seg == 1 or seg == 3:
             return 0
         else:
-            return 1/(self.lane_width)  # 1/r
+            return 1/self.radius  # kappa = 1/r
 
     def get_U_x(self):
         """
@@ -72,30 +73,11 @@ class Nominal_Trajectory_Handler:
         return self.unit_step * Nominal_Trajectory_Handler.current_index
 
     def get_current_optimal_pose(self, opt_traj, future_steps=0):
+        """
+        Given that the car is in state s_t, this should always be giving the optimal state for s_{t+1}
+        So if we want to compare x and y that should be done after incrementing the current dynamics to the next state
+        """
         return opt_traj[Nominal_Trajectory_Handler.current_index+future_steps, :]
-
-    # def get_next_optimal_pose(self, opt_traj):
-    #     return opt_traj[Nominal_Trajectory_Handler.current_index + 1, :]
-
-
-    # def get_x_y_from_state(self, e, e_prev, opt_traj):  # state should be true state? to find x. Could also do that calc in true dynamics
-    #     """
-
-    #     """
-    #     opt_x, opt_y, opt_heading = get_current_optimal_pose(opt_traj)
-    #     seg = self.get_segment()
-    #     delta_e = e-e_prev
-
-    #     if seg == 1:
-    #         x = opt_x + e_prev
-    #         # unit_step**2 = e**
-    #     elif seg == 2:
-    #         pass
-    #     elif seg == 3:
-    #         y = opt_y + e_prev
-
-
-    #     return x, y
 
 
     def get_optimal_trajectory(self):
@@ -106,7 +88,6 @@ class Nominal_Trajectory_Handler:
         # TODO:
         - handle edge cases between the segments
         - look at if n_poses_i isnt an integer for any segment
-        - Add self.circle_rad as an attribute and replace self.lane_width almost everywhere
         """
         ### First segment, straight ###
         y_poses_1 = np.arange(0, self.segment_1_length, self.unit_step).reshape((-1, 1))
@@ -114,15 +95,14 @@ class Nominal_Trajectory_Handler:
         angles_1 = np.ones((y_poses_1.shape[0], 1))*(np.pi/2)
 
         ### Second segment, circle ###
-        r = self.lane_width
         x_poses_2 = []
         y_poses_2 = []
         angles_2 = []
         for i in range(self.n_seg2):
             # Calculate poses across the arc
             pos_ang = ((np.pi/2) * i /self.n_seg2)
-            x_poses_2.append( self.circle_center[0] + r*np.cos(pos_ang) )
-            y_poses_2.append( self.circle_center[1] + r*np.sin(pos_ang) )
+            x_poses_2.append( self.circle_center[0] + self.radius*np.cos(pos_ang) )
+            y_poses_2.append( self.circle_center[1] + self.radius*np.sin(pos_ang) )
 
             # Calculate heading angles across the arc
             steer_ang = (np.pi/2) + ((np.pi/2) * i / self.n_seg2)
@@ -133,7 +113,7 @@ class Nominal_Trajectory_Handler:
         angles_2 = np.array(angles_2).reshape((self.n_seg2, 1))
 
         ### Third segment, straight right ###
-        x_poses_3 = np.arange(self.map_width/2 - self.lane_width, 0, -self.unit_step).reshape(-1, 1)
+        x_poses_3 = np.arange(self.segment_3_length, 0, -self.unit_step).reshape(-1, 1)
         y_poses_3 = np.ones((x_poses_3.shape[0], 1))*self.map_height/2
         angles_3 = np.ones((x_poses_3.shape[0], 1))*np.pi
 

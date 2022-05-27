@@ -10,7 +10,7 @@ from utils_new import *
 from mpc import MPC
 from nominal_trajectory import Nominal_Trajectory_Handler
 
-from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
+from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T, FIXED_CONTROL
 from dynamics import calculate_x_y_pos
 
 
@@ -25,23 +25,14 @@ def take_action_placeholder(obs):
     return [0, 0]
 
 
-def simple_controller_1(delta_psi):
-    if delta_psi > 0:
-        steering = -1
-    elif delta_psi < 0:
-        steering = 1
-    else:
-        steering = 0
-    return [steering, 0]
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--goal', type=str, help="left, straight, right", default="all")
     parser.add_argument("--visualize", action="store_true", default=False)
+    parser.add_argument("--show_nominal", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
-    mpc_controller = MPC(pred_horizon=20, traj_handler=trajectory_handler)
+    mpc_controller = MPC(pred_horizon=1, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -52,17 +43,19 @@ if __name__ == '__main__':
 
     trajectory_handler.reset_index()
     opt_traj = trajectory_handler.get_optimal_trajectory()
+    trajectory_handler.increment_current_index()  # incr this once at the start. Now opt_pose will always be the pose where we are going
 
-    ## Debug:
-    # np.set_printoptions(threshold=sys.maxsize)
-    # print(opt_traj)
-    # plt.figure()
-    # x, y = opt_traj[:, 0], opt_traj[:, 1]
-    # plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
-    # plt.xlim([0, MAP_WIDTH])
-    # plt.ylim([0, MAP_HEIGHT])
-    # plt.legend()
-    # plt.show()
+    # Debug - for checking the trajectory:
+    if args.show_nominal:
+        np.set_printoptions(threshold=sys.maxsize)
+        print(opt_traj)
+        plt.figure()
+        x, y = opt_traj[:, 0], opt_traj[:, 1]
+        plt.scatter(opt_traj[:, 0], opt_traj[:, 1], label="planned nominal trajectory")
+        plt.xlim([0, MAP_WIDTH])
+        plt.ylim([0, MAP_HEIGHT])
+        plt.legend()
+        plt.show()
 
     prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
     prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
@@ -84,59 +77,47 @@ if __name__ == '__main__':
         while not done:
             t = time.time()
 
-            #print("s", trajectory_handler.get_s())
-
-            # e, delta_psi = trajectory_handler.calc_offset(opt_traj, curr_pos)
-
+            # Extract current state from controller
             U_y, r, e, delta_psi, curr_x, curr_y, curr_head = obs
-
-            # action = simple_controller_1(delta_psi)
-            # action = take_action_placeholder(obs)
-            # Input to MPC-controler: [U_y, r, delta_psi, e]
             curr_state = np.array([U_y, r, e, delta_psi])
             print("current state:", curr_state)
 
-            prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
-            u0 = prev_controls[:, 0][0]
+            # Calculate the next control to take
+            # prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
+            # u0 = prev_controls[:, 0][0]
+            if iteration < 5:
+                u0 = FIXED_CONTROL  # small negative seems to turn left, high positive also turns left
+            else:
+                u0 = 0
+            u0 = (FIXED_CONTROL*iteration) / 100
+            if iteration > 100:
+                u0 = FIXED_CONTROL
+            print("Control u0:", u0)
+
+            # Reformat the prev_states and prev_controls for next iterations linearization
             prev_controls = np.concatenate((prev_controls[:, 1:], prev_controls[:, -1].reshape(-1, 1)), axis=1)
             prev_state_traj = prev_state_traj[:, 1:]
-            # u0 = 5
-            # if iteration >= 50:
-            #     u0 = 0
-            # iteration += 1
 
-            print("Control u0:", u0)
-            #print("u0:", u0)
-            # u0 = 0
+            # Use the action in the environment
             action = [u0, 0]  # u0 as steering, 0 acceleration
             obs, _, done, _ = env.step(action)
 
-            input_states = np.zeros((prev_state_traj.shape[0], prev_state_traj.shape[1]-1))
-            input_states[0:3, :] = prev_state_traj[0:3, :-1]  # Don't get last column
-            input_states[3, :] = prev_state_traj[3, 1:]
-            opt_headings = np.zeros((input_states.shape[1]))
-            for i in range(input_states.shape[1]):
+            # Plot the planned trajectory in the x, y, heading - space
+            # input_states = np.zeros((prev_state_traj.shape[0], prev_state_traj.shape[1]-1))
+            # input_states[0:3, :] = prev_state_traj[0:3, :-1]  # Don't get last column
+            # input_states[3, :] = prev_state_traj[3, 1:]
+            opt_headings = np.zeros((prev_state_traj.shape[1]))  # input_states.shape[1]
+            for i in range(prev_state_traj.shape[1]):
                 _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
-            # Get future optimal states...
-            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), input_states)
+            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj)
             env.world.visualizer.draw_points(np.array([proj_x, proj_y]))
-            # plt.subplot(2, 1, 1)
-            # plt.plot(prev_state_traj[:, 0], label="planned U_y")
-            # plt.plot(prev_state_traj[:, 1], label="planned r")
-            # plt.plot(prev_state_traj[:, 2], label="planned e")
-            # plt.plot(prev_state_traj[:, 3], label="planned delta_psi")
-            # plt.legend()
-            # plt.subplot(2, 1, 2)
-            # print("xshape", x.shape, "yshape", y.shape)
-            # plt.plot(prev_controls, "-o", label="Controls over the horizon")
-            # plt.legend()
-            # plt.show()
 
+            iteration += 1
             trajectory_handler.increment_current_index()
 
             if args.visualize:
                 env.render()
-                while time.time() - t < env.dt/2:   # Temp * 10
+                while time.time() - t < env.dt*5/2:   # Temp * 10
                     pass  # runs 2x speed. This is not great, but time.sleep() causes problems with the interactive controller
             if done:
                 env.close()

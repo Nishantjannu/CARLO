@@ -3,7 +3,7 @@ from .geometry import Point, Rectangle, Circle, Ring, Line
 from typing import Union
 import copy
 
-from dynamics import true_dynamics, calculate_x_y_pos
+from dynamics import true_dynamics, linear_dynamics, calculate_x_y_pos
 from nominal_trajectory import Nominal_Trajectory_Handler
 from constants import *
 
@@ -31,6 +31,8 @@ class Entity:
             self.e = 0
             self.delta_psi = 0
             self.s = 0
+
+            self.prev_control = 0
 
             # Other constants that we need TODO add these as input (in agents.py)
             # From Model Predictive Control for Vehicle Stabilization at the Limits of handling
@@ -79,37 +81,46 @@ class Entity:
                 0.95: "asphalt"
             }
 
-            # x and y dist travelled based on current state
-            # dist_travelled = DELTA_T * np.array([U_x*np.cos(self.heading) - self.U_y*np.sin(self.heading),
-            #                                    U_x*np.sin(self.heading) + self.U_y*np.cos(self.heading)])
-
-
-            # Calculate current dynamics
-            f_true = true_dynamics(state, delta, U_x, kappa, road_types[friction])
-            U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot = f_true
-
-            # Get current optimal poses - off-by-1 problem for heading?
+            # Get current optimal poses
             opt_traj = self.traj_handler.get_optimal_trajectory()
             opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
 
-            # Update states
-            self.U_y += U_y_dot * dt
-            self.r += r_dot * dt
-            self.e += e_dot * dt
-            self.delta_psi += delta_psi_dot * dt
-            self.s += s_dot * dt
+            if DEBUG_LINERIZED_DYNAMICS == 1:
+                print("prev control:", self.prev_control, "current control", delta)
+                prev_vals = {
+                    "state": state,
+                    "control": self.prev_control
+                }
+                A, B, C = linear_dynamics(prev_vals, U_x, kappa, road_types[friction])
+                new_state = state + dt*A@state + dt*B*delta + dt*C
+                self.U_y = new_state[0]
+                self.r = new_state[1]
+                self.e = new_state[2]
+                self.delta_psi = new_state[3]
 
+                self.prev_control = delta
+
+            else:
+                # Calculate current dynamics
+                f_true = true_dynamics(state, delta, U_x, kappa, road_types[friction])
+                U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot = f_true
+
+                # Update states
+                self.U_y += U_y_dot * dt
+                self.r += r_dot * dt
+                self.e += e_dot * dt
+                self.delta_psi += delta_psi_dot * dt
+                self.s += s_dot * dt
+
+            # Find the new x, y and z of the car
             ipt_state = state.copy()
-            ipt_state[3] = self.delta_psi  # Update this value to shift it
+            # ipt_state[3] = self.delta_psi  # Update this value to shift it
             ipt_state = ipt_state.reshape((ipt_state.shape[0], 1))
             new_car_state = calculate_x_y_pos(self.center.x, self.center.y, self.heading, [opt_heading], U_x, ipt_state)
 
             # Update the car's x, y and heading
-            # Old approach
-            # actual_pos = np.array([self.center.x, self.center.y]) + np.array([dist_travelled[0], dist_travelled[1]])
-            # actual_heading = np.mod(opt_heading - self.delta_psi, 2*np.pi)
-            self.center = Point(new_car_state[0], new_car_state[1])  # Point(actual_pos[0], actual_pos[1])
-            self.heading = new_car_state[2][0][0]  # sorry  # actual_heading
+            self.center = Point(new_car_state[0], new_car_state[1])
+            self.heading = new_car_state[2][0][0]  # - problem with arrays
 
             self.buildGeometry()
 
