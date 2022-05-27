@@ -32,8 +32,8 @@ class MPC:
         self.R_val = 0.01
         self.delta_t = DELTA_T
         self.W_val = 50
-        self.steering_max = 10
-        self.slew_rate_max = 20  # Todo update
+        self.steering_max = 5
+        self.slew_rate_max = 0.1
         self.traj_handler = traj_handler
 
     def calculate_control(self, x0, prev_x_sol, prev_controls):
@@ -65,9 +65,8 @@ class MPC:
             # Add constraints
             # print("shape of x:", x[:, k].shape, "shape of A", A.shape, "shape of B", B.shape, "shape of u", u[:,k].shape, "shape of C", C.shape)
 
-            # TODO multiply by delta t here
             constraints += [x[:,k+1] == x[:, k] + self.delta_t*A@x[:,k] + self.delta_t*B*u[:,k] + self.delta_t*C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
-            constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
+            # constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
             # constraints += [-self.slew_rate_max <= v, v <= self.steering_max] # Constraints for the control signal
             # TODO add constraint depending on the friction environment
 

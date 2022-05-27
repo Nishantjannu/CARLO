@@ -47,28 +47,41 @@ def get_tire_angles(U_x, U_y, r, delta):
     # return angle_f, angle_r
 
 
-def project_x_y(curr_x, curr_y, curr_heading, Ux, states):
+def calculate_x_y_pos(curr_x, curr_y, curr_heading, opt_headings, Ux, states):
     """
-    Takes in states
-    4 x N
+    Takes in states (4 x N):
+    [U_y
+    r
+    e
+    delta_psi]
+    delta_psis need to be shifted one value into the future
+
+    N is automatically assumed as the horizon for how far to project the x and y.
+
+    Projects curr_x and curr_y into the future.
     """
+    # Create vectors for storing the results
     N = states.shape[1]
     x_vec = np.zeros((N, 1))
     y_vec = np.zeros((N, 1))
     head_vec = np.zeros((N, 1))
     U_y_vec, _, _, delta_psi_vec = states[0, :], states[1, :], states[2, :], states[3, :]
+
+    # Initialize the position projection loop
     x = curr_x
     y = curr_y
     heading = curr_heading
     for i in range(N):
         U_y = U_y_vec[i]
         delta_psi = delta_psi_vec[i]
-        dist_travelled = DELTA_T * np.array([Ux * np.cos(heading) - U_y * np.sin(heading),
+        opt_heading = opt_headings[i]
+        dist_travelled = DELTA_T * np.array([Ux * np.cos(heading) - U_y * np.sin(heading),  # Ux is constant
                                             Ux * np.sin(heading) + U_y * np.cos(heading)])
-        heading = np.mod(heading - delta_psi, 2*np.pi)
+        heading = np.mod(opt_heading + delta_psi, 2*np.pi)  # calculate dist_travelled before updating heading, put + instead of minus for right hand turn
         x += dist_travelled[0]
         y += dist_travelled[1]
 
+        # Store the values
         x_vec[i] = x
         y_vec[i] = y
         head_vec[i] = heading
@@ -100,6 +113,8 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
     # extract previous values
     Uyo, ro, _, _  = prev_values["state"]
     uo = prev_values["control"]
+    print("uo:", uo)
+
 
     ############ LINEARIZATION ################
 
@@ -107,6 +122,7 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
 
     fy_f_bar, cf = linear_fiala(alpha_f_bar, road_type)
     fy_r_bar, cr = linear_fiala(alpha_r_bar, road_type)
+    print("Linear dynamics: fy_f, fy_r:", fy_f_bar, fy_r_bar)
 
     A_Uy = np.array([(cf + cr)/ (m*Ux), (cf*a - cr*b)/ (m*Ux) - Ux, 0, 0 ])
     B_Uy = - cf/m

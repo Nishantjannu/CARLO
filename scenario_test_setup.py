@@ -11,7 +11,7 @@ from mpc import MPC
 from nominal_trajectory import Nominal_Trajectory_Handler
 
 from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T
-from dynamics import project_x_y
+from dynamics import calculate_x_y_pos
 
 
 def controller_mapping(scenario_name, control):
@@ -41,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument("--visualize", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
-    mpc_controller = MPC(pred_horizon=10, traj_handler=trajectory_handler)
+    mpc_controller = MPC(pred_horizon=20, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -98,6 +98,8 @@ if __name__ == '__main__':
 
             prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
             u0 = prev_controls[:, 0][0]
+            prev_controls = np.concatenate((prev_controls[:, 1:], prev_controls[:, -1].reshape(-1, 1)), axis=1)
+            prev_state_traj = prev_state_traj[:, 1:]
             # u0 = 5
             # if iteration >= 50:
             #     u0 = 0
@@ -105,10 +107,18 @@ if __name__ == '__main__':
 
             print("Control u0:", u0)
             #print("u0:", u0)
+            # u0 = 0
             action = [u0, 0]  # u0 as steering, 0 acceleration
             obs, _, done, _ = env.step(action)
 
-            proj_x, proj_y, proj_head = project_x_y(env.ego.x, env.ego.y, env.ego.heading, trajectory_handler.get_U_x(), prev_state_traj)
+            input_states = np.zeros((prev_state_traj.shape[0], prev_state_traj.shape[1]-1))
+            input_states[0:3, :] = prev_state_traj[0:3, :-1]  # Don't get last column
+            input_states[3, :] = prev_state_traj[3, 1:]
+            opt_headings = np.zeros((input_states.shape[1]))
+            for i in range(input_states.shape[1]):
+                _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
+            # Get future optimal states...
+            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), input_states)
             env.world.visualizer.draw_points(np.array([proj_x, proj_y]))
             # plt.subplot(2, 1, 1)
             # plt.plot(prev_state_traj[:, 0], label="planned U_y")
@@ -126,7 +136,7 @@ if __name__ == '__main__':
 
             if args.visualize:
                 env.render()
-                while time.time() - t < env.dt*10/2:   # Temp * 10
+                while time.time() - t < env.dt/2:   # Temp * 10
                     pass  # runs 2x speed. This is not great, but time.sleep() causes problems with the interactive controller
             if done:
                 env.close()

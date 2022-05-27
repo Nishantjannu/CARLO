@@ -26,7 +26,7 @@ class Nominal_Trajectory_Handler:
         unit_step = self.velocity * delta_t
         self.segment_1_length = map_height/2 - lane_width
         self.n_seg1 = np.arange(0, self.segment_1_length, self.unit_step).shape[0]
-        self.segment_2_length = (2*np.pi*lane_width) / 4
+        self.segment_2_length = (2*lane_width*np.pi) / 4
         self.n_seg2 = int(self.segment_2_length / self.unit_step) + 1
         self.segment_3_length = map_width/2 - lane_width
         self.n_seg3 = np.arange(0, self.segment_3_length, self.unit_step).shape[0]
@@ -60,7 +60,7 @@ class Nominal_Trajectory_Handler:
         if seg == 1 or seg == 3:
             return 0
         else:
-            return 1/(self.lane_width/2)  # 1/r
+            return 1/(self.lane_width)  # 1/r
 
     def get_U_x(self):
         """
@@ -71,8 +71,8 @@ class Nominal_Trajectory_Handler:
     def get_s(self):
         return self.unit_step * Nominal_Trajectory_Handler.current_index
 
-    def get_current_optimal_pose(self, opt_traj):
-        return opt_traj[Nominal_Trajectory_Handler.current_index, :]
+    def get_current_optimal_pose(self, opt_traj, future_steps=0):
+        return opt_traj[Nominal_Trajectory_Handler.current_index+future_steps, :]
 
     # def get_next_optimal_pose(self, opt_traj):
     #     return opt_traj[Nominal_Trajectory_Handler.current_index + 1, :]
@@ -125,7 +125,7 @@ class Nominal_Trajectory_Handler:
             y_poses_2.append( self.circle_center[1] + r*np.sin(pos_ang) )
 
             # Calculate heading angles across the arc
-            steer_ang = (np.pi/2) - ((np.pi/2) * i / self.n_seg2)
+            steer_ang = (np.pi/2) + ((np.pi/2) * i / self.n_seg2)
             angles_2.append(steer_ang)
 
         x_poses_2 = np.array(x_poses_2).reshape((self.n_seg2, 1))
@@ -135,7 +135,7 @@ class Nominal_Trajectory_Handler:
         ### Third segment, straight right ###
         x_poses_3 = np.arange(self.map_width/2 - self.lane_width, 0, -self.unit_step).reshape(-1, 1)
         y_poses_3 = np.ones((x_poses_3.shape[0], 1))*self.map_height/2
-        angles_3 = np.zeros((x_poses_3.shape[0], 1))
+        angles_3 = np.ones((x_poses_3.shape[0], 1))*np.pi
 
         # Merge these and return
         x_poses = np.vstack((x_poses_1, x_poses_2, x_poses_3))

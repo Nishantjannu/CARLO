@@ -3,7 +3,7 @@ from .geometry import Point, Rectangle, Circle, Ring, Line
 from typing import Union
 import copy
 
-from dynamics import true_dynamics
+from dynamics import true_dynamics, calculate_x_y_pos
 from nominal_trajectory import Nominal_Trajectory_Handler
 from constants import *
 
@@ -64,92 +64,52 @@ class Entity:
         raise NotImplementedError
 
     def tick(self, dt, friction=None):
-        # if friction:
-        #     print("Friction is:", friction)
-        # else:
-        #     print("no fritcion")
-
         if self.movable:
             speed = self.speed
             heading = self.heading
-
-            # Kinematic bicycle model dynamics based on
-            # "Kinematic and Dynamic Vehicle Models for Autonomous Driving Control Design" by
-            # Jason Kong, Mark Pfeiffer, Georg Schildbach, Francesco Borrelli
-            # lr = self.rear_dist
-            # lf = lr  # we assume the center of mass is the same as the geometric center of the entity
-            # beta = np.arctan(lr / (lf + lr) * np.tan(self.inputSteering))
-            #
-            # new_angular_velocity = speed * self.inputSteering  # this is not needed and used for this model, but let's keep it for consistency (and to avoid if-else statements)
-            # new_acceleration = self.inputAcceleration - self.friction
-            # new_speed = np.clip(speed + new_acceleration * dt, self.min_speed, self.max_speed)
-            # new_heading = heading + ((speed + new_speed)/lr)*np.sin(beta)*dt/2.
-            # angle = (heading + new_heading)/2. + beta
-            # new_center = self.center + (speed + new_speed)*Point(np.cos(angle), np.sin(angle))*dt / 2.
-            # new_velocity = Point(new_speed * np.cos(new_heading), new_speed * np.sin(new_heading))
-
-            """
-            New approach
-            """
             delta = self.inputSteering
 
             kappa = self.traj_handler.get_kappa(0)
             U_x = self.traj_handler.get_U_x()
-
             state = np.array([self.U_y, self.r, self.e, self.delta_psi])
 
+            # This should be changed, should get material directly rather than doing this conversion
             road_types = {
                 0.25: "ice",
                 0.95: "asphalt"
             }
 
-            dist_travelled = DELTA_T * np.array([U_x*np.cos(self.heading) - self.U_y*np.sin(self.heading),
-                                                U_x*np.sin(self.heading) + self.U_y*np.cos(self.heading)])
+            # x and y dist travelled based on current state
+            # dist_travelled = DELTA_T * np.array([U_x*np.cos(self.heading) - self.U_y*np.sin(self.heading),
+            #                                    U_x*np.sin(self.heading) + self.U_y*np.cos(self.heading)])
 
+
+            # Calculate current dynamics
             f_true = true_dynamics(state, delta, U_x, kappa, road_types[friction])
             U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot = f_true
+
+            # Get current optimal poses - off-by-1 problem for heading?
+            opt_traj = self.traj_handler.get_optimal_trajectory()
+            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
 
             # Update states
             self.U_y += U_y_dot * dt
             self.r += r_dot * dt
-            e_prev = self.e
             self.e += e_dot * dt
             self.delta_psi += delta_psi_dot * dt
-            s_prev = self.s
             self.s += s_dot * dt
 
+            ipt_state = state.copy()
+            ipt_state[3] = self.delta_psi  # Update this value to shift it
+            ipt_state = ipt_state.reshape((ipt_state.shape[0], 1))
+            new_car_state = calculate_x_y_pos(self.center.x, self.center.y, self.heading, [opt_heading], U_x, ipt_state)
 
-            '''
-            # Point-mass dynamics based on
-            # "Active Preference-Based Learning of Reward Functions" by
-            # Dorsa Sadigh, Anca D. Dragan, S. Shankar Sastry, Sanjit A. Seshia
-
-            new_angular_velocity = speed * self.inputSteering
-            new_acceleration = self.inputAcceleration - self.friction * speed
-
-            new_heading = heading + (self.angular_velocity + new_angular_velocity) * dt / 2.
-            new_speed = np.clip(speed + (self.acceleration + new_acceleration) * dt / 2., self.min_speed, self.max_speed)
-
-            new_velocity = Point(((speed + new_speed) / 2.) * np.cos((new_heading + heading) / 2.),
-                                    ((speed + new_speed) / 2.) * np.sin((new_heading + heading) / 2.))
-
-            new_center = self.center + (self.velocity + new_velocity) * dt / 2.
-
-            '''
-
-            opt_traj = self.traj_handler.get_optimal_trajectory()
-            opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
-            # opt_x_next, opt_y_next, opt_heading_next = self.traj_handler.get_next_optimal_pose(opt_traj)
-
-            actual_pos = np.array([self.center.x, self.center.y]) + dist_travelled
-            actual_heading = np.mod(opt_heading - self.delta_psi, 2*np.pi)  # put + instead of minus for right hand turn
-
-            self.center = Point(actual_pos[0], actual_pos[1])
-            self.heading = actual_heading
-            # self.heading = np.mod(new_heading, 2*np.pi) # wrap the heading angle between 0 and +2pi
-            # self.velocity = new_velocity
-            # self.acceleration = new_acceleration
-            # self.angular_velocity = new_angular_velocity
+            # Update the car's x, y and heading
+            # Old approach
+            # actual_pos = np.array([self.center.x, self.center.y]) + np.array([dist_travelled[0], dist_travelled[1]])
+            # actual_heading = np.mod(opt_heading - self.delta_psi, 2*np.pi)
+            self.center = Point(new_car_state[0], new_car_state[1])  # Point(actual_pos[0], actual_pos[1])
+            self.heading = new_car_state[2][0][0]  # sorry  # actual_heading
 
             self.buildGeometry()
 
