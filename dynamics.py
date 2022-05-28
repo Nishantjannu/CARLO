@@ -28,18 +28,19 @@ def linear_fiala(alpha, road_type):
     returns force and gradient at given alpha
     """
     scale_factor = 1000  # kN
+    saturation_derivative = 0.01  # 0
     if road_type == "asphalt":
         if alpha < -6:
-            return 8*scale_factor, 0
+            return 8*scale_factor, saturation_derivative*scale_factor
         elif alpha > 6:
-            return -8*scale_factor, 0
+            return -8*scale_factor, saturation_derivative*scale_factor
         else:
             return - 1.33 * alpha*scale_factor, -1.33*scale_factor
     elif road_type == "ice":
         if alpha < -1:
-            return 1*scale_factor, 0
+            return 1*scale_factor, saturation_derivative*scale_factor
         elif alpha > 1:
-            return -1*scale_factor, 0
+            return -1*scale_factor, saturation_derivative*scale_factor
         else:
             return - alpha*scale_factor, -1.*scale_factor
 
@@ -101,7 +102,6 @@ def true_dynamics(state, control, Ux, kappa, road_type):
     fy_f, _ = linear_fiala(angle_f, road_type)
     fy_r, _ = linear_fiala(angle_r, road_type)
     print("True dynamics: fy_f, fy_r:", fy_f, fy_r)
-    print("Uy:", Uy, "r", r)
 
     # dynamics equations
     U_y_dot = (fy_f + fy_r) / m - r*Ux
@@ -114,6 +114,26 @@ def true_dynamics(state, control, Ux, kappa, road_type):
 
     return f_true
 
+
+def contigency_linear_dynamics(prev_vals_nom, prev_vals_c, Ux, kappa, road_type_nom, road_type_c):
+    sdim = len(prev_vals_nom["state"])
+    adim = 1  # should be done in a better way...
+
+    A_tot = np.zeros((2*sdim, 2*sdim))
+    B_tot = np.zeros((2*sdim, 2*adim))
+    C_tot = np.zeros((2*sdim,))
+
+    A_nom, B_nom, C_nom = linear_dynamics(prev_vals_nom, Ux, kappa, road_type_nom)
+    A_c, B_c, C_c = linear_dynamics(prev_vals_c, Ux, kappa, road_type_c)
+
+    A_tot[:sdim, :sdim] = A_nom
+    A_tot[sdim:, sdim:] = A_c
+    B_tot[:sdim, 0] = B_nom
+    B_tot[sdim:, 1] = B_c
+    C_tot[:sdim] = C_nom
+    C_tot[sdim:] = C_c
+
+    return(A_tot, B_tot, C_tot)
 
 
 def linear_dynamics(prev_values, Ux, kappa, road_type):
@@ -130,13 +150,12 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
     fy_f_bar, cf = linear_fiala(alpha_f_bar, road_type)
     fy_r_bar, cr = linear_fiala(alpha_r_bar, road_type)
     print("Linear dynamics: fy_f, fy_r:", fy_f_bar, fy_r_bar)
-    print("Uy:", Uyo, "r", ro)
 
     A_Uy = np.array([(cf + cr)/ (m*Ux), (cf*a - cr*b)/ (m*Ux) - Ux, 0, 0 ])
     B_Uy = - cf/m
     C_Uy = (-cf*alpha_f_bar - cr*alpha_r_bar + fy_f_bar + fy_r_bar)/ m
 
-    A_r = np.array([(a*cf - b*cr)/ (Iz*Ux), (cf* a**2 + cr* b**2)/ (Iz*Ux) - Ux, 0, 0 ])
+    A_r = np.array([(a*cf - b*cr)/ (Iz*Ux), (cf* a**2 + cr* b**2)/ (Iz*Ux), 0, 0 ])
     B_r = - (a * cf)/Iz
     C_r = (-a * cf * alpha_f_bar + b * cr * alpha_r_bar + a * fy_f_bar - b * fy_r_bar)/ Iz
 
@@ -168,4 +187,3 @@ if __name__ == "__main__":
     plt.plot(x, y_ice, label="Ice")
     plt.legend()
     plt.show()
-

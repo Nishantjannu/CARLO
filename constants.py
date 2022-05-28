@@ -1,5 +1,5 @@
 # Important settings for the map
-MAP_WIDTH = 100  # 80
+MAP_WIDTH = 200  # 80
 MAP_HEIGHT = 100  # 120
 LANE_WIDTH = 16  # 4.4
 INITIAL_VELOCITY = 10  # 3
@@ -20,4 +20,4 @@ CAR_FRONT_AXIS_DIST = 1.35  # Distance to front axis from center of mass
 CAR_BACK_AXIS_DIST = 1.15  # Distance to rear axis from center of mass
 
 FIXED_CONTROL = 1
-DEBUG_LINERIZED_DYNAMICS = 0
+DEBUG_LINERIZED_DYNAMICS = 1
