@@ -72,6 +72,13 @@ class Nominal_Trajectory_Handler:
     def get_s(self):
         return self.unit_step * Nominal_Trajectory_Handler.current_index
 
+    def get_lane_bounds(self, future_steps=0):
+        seg = self.get_segment(future_steps)
+        if seg == 1 or seg == 3:
+            return self.lane_width/2
+        else:
+            return self.lane_width/2  # This is wrong and would need to be updated
+
     def get_current_optimal_pose(self, opt_traj, future_steps=0):
         """
         Given that the car is in state s_t, this should always be giving the optimal state for s_{t+1}

@@ -35,7 +35,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
     if not args.use_cont:
-        mpc_controller = MPC(pred_horizon=30, traj_handler=trajectory_handler)
+        mpc_controller = MPC(pred_horizon=50, traj_handler=trajectory_handler)
     else:
         c_mpc = Contigency_MPC(pred_horizon=50, traj_handler=trajectory_handler)
     scenario_name = "intersection"
@@ -122,7 +122,7 @@ if __name__ == '__main__':
 
             curr_state_c = np.concatenate((curr_state, curr_state))
             u0_c = np.array([u0, u0])
-            contigency_prev_controls, contigency_prev_state_traj = c_mpc.calculate_control(curr_state_c, u0_c, contigency_prev_state_traj, contigency_prev_controls)
+            contigency_prev_controls, contigency_prev_state_traj, status = c_mpc.calculate_control(curr_state_c, u0_c, contigency_prev_state_traj, contigency_prev_controls)
             u0 = contigency_prev_controls[:, 0][0]
 
 
@@ -151,15 +151,16 @@ if __name__ == '__main__':
 
         # Plot the planned trajectory in the x, y, heading - space
         if args.use_cont:
-            opt_headings = np.zeros((contigency_prev_state_traj.shape[1]))
-            for i in range(contigency_prev_state_traj.shape[1]):
-                _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
-            # Best case
-            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[:4, :])
-            env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
-            # Worst case
-            proj_x2, proj_y2, proj_head2 = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[4:, :])
-            env.world.visualizer.draw_points(np.array([proj_x2, proj_y2]).squeeze(axis=2), color="orange")
+            if status == "optimal":
+                opt_headings = np.zeros((contigency_prev_state_traj.shape[1]))
+                for i in range(contigency_prev_state_traj.shape[1]):
+                    _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
+                # Best case
+                proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[:4, :])
+                env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
+                # Worst case
+                proj_x2, proj_y2, proj_head2 = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[4:, :])
+                env.world.visualizer.draw_points(np.array([proj_x2, proj_y2]).squeeze(axis=2), color="orange")
         else:
             opt_headings = np.zeros((prev_state_traj.shape[1]))
             for i in range(prev_state_traj.shape[1]):

@@ -43,6 +43,7 @@ class MPC:
         # Create optimization variables.
         u = cp.Variable((self.adim, self.pred_horizon))
         x = cp.Variable((self.sdim, self.pred_horizon+1))
+        ny = cp.Variable()
 
         QN = self.create_terminal_Q()
 
@@ -75,7 +76,13 @@ class MPC:
             constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
             constraints += [-self.slew_rate_max <= v, v <= self.slew_rate_max] # Constraints for the control signal
 
-        cost += cp.quad_form(x[:, self.pred_horizon], QN)
+            # Within bounds constraint
+            # Better to put one ny for each loop iteration? Could do that too
+            constraints += [cp.abs(x[2, k]) <= self.traj_handler.get_lane_bounds(k) + ny]  # nr will get e
+
+        cost += 5000 * cp.abs(ny)
+
+        # cost += cp.quad_form(x[:, self.pred_horizon], QN)
         # alpha_limit = 25
         # alpha_f = (180/np.pi)*(x[0,self.pred_horizon] + a*x[1,self.pred_horizon])/Ux - u[0,self.pred_horizon-1]
         # alpha_r = (180/np.pi)*(x[0,self.pred_horizon] - b*x[1,self.pred_horizon])/Ux
@@ -156,6 +163,7 @@ class Contigency_MPC:
         # Create optimization variables.
         u = cp.Variable((self.adim, self.pred_horizon))
         x = cp.Variable((self.sdim, self.pred_horizon+1))
+        ny = cp.Variable()
 
         QN = self.create_terminal_Q()
 
@@ -189,17 +197,24 @@ class Contigency_MPC:
             constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
             constraints += [-self.slew_rate_max <= v, v <= self.slew_rate_max] # Constraints for the control signal
 
+            # Within bounds constraint
+            # Better to put one ny for each loop iteration? Could do that too
+            constraints += [cp.abs(x[6, k]) <= self.traj_handler.get_lane_bounds(k) + ny]  # nr will get ice-controller-e
+
+        cost += 5000 * cp.abs(ny)
+
         cost += cp.quad_form(x[:, self.pred_horizon], QN)
 
         # Form and solve problem.
         prob = cp.Problem(cp.Minimize(cost), constraints)
         sol = prob.solve(solver=cp.ECOS)
         status = prob.status
+        print("Cost is: ", prob.value)
         if status != "optimal":
             print("\n\n\nStatus NOT OPTIMAL (status is):", status, "\n\n\n")
             u_new = np.zeros_like(u.value)
             u_new[:, 0] = u0
-            return u_new, x.value
+            return u_new, x.value, status
 
         # Final alphas
         # alpha_limit = 25
@@ -211,14 +226,14 @@ class Contigency_MPC:
         #     u_new[:, 0] = u.value[:, 0]
         #     return u_new, np.zeros_like(x.value)
 
-        return u.value, x.value
+        return u.value, x.value, status
 
 
 
     def create_terminal_Q(self):
         Q = np.zeros((self.sdim, self.sdim))
-        Q[self.sdim-2, self.sdim-2] = 10
-        Q[self.sdim-1, self.sdim-1] = 10
+        Q[self.sdim-2, self.sdim-2] = 1
+        Q[self.sdim-1, self.sdim-1] = 1
         return Q
 
     def create_cost_matrices(self, u_k, u_k_prev):
