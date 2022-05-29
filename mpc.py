@@ -30,8 +30,8 @@ class MPC:
         self.adim = 1
         self.R_val = 0.01
         self.delta_t = DELTA_T
-        self.steering_max = 7
-        self.slew_rate_max = 2
+        self.steering_max = 5
+        self.slew_rate_max = 0.5
         self.traj_handler = traj_handler
 
     def calculate_control(self, x0, u0, prev_x_sol, prev_controls):
@@ -58,12 +58,12 @@ class MPC:
                 Q, R, v = self.create_cost_matrices(u[:,k], u0)
             else:
                 Q, R, v = self.create_cost_matrices(u[:,k], u[:,k-1])
-            A, B, C = linear_dynamics(prev_vals, Ux, self.traj_handler.get_kappa(k), "asphalt")
+            A, B, C = linear_dynamics(prev_vals, Ux, self.traj_handler.get_kappa(k), "ice")
 
 
             # Add costs
-            cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx
-            cost += cp.quad_form(v, R)  #v[:,k]*R*v[:,k]    # Add the cost u^TRu
+            # cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx
+            # cost += cp.quad_form(v, R)  #v[:,k]*R*v[:,k]    # Add the cost u^TRu
 
             # alpha_limit = 12
             # alpha_f = (180/np.pi)*(x[0,k] + a*x[1,k])/Ux - u[0,k]
@@ -72,14 +72,15 @@ class MPC:
             # cost += (1/36)*cp.square(alpha_r)
             # constraints += [alpha_f <= alpha_limit, alpha_r <= alpha_limit]
             constraints += [x[:,k+1] == x[:, k] + self.delta_t*A@x[:,k] + self.delta_t*B*u[:,k] + self.delta_t*C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
-            # constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
-            # constraints += [-self.slew_rate_max <= v, v <= self.slew_rate_max] # Constraints for the control signal
+            constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
+            constraints += [-self.slew_rate_max <= v, v <= self.slew_rate_max] # Constraints for the control signal
 
         cost += cp.quad_form(x[:, self.pred_horizon], QN)
-        alpha_limit = 15
-        alpha_f = (180/np.pi)*(x[0,self.pred_horizon] + a*x[1,self.pred_horizon])/Ux - u[0,self.pred_horizon-1]
-        alpha_r = (180/np.pi)*(x[0,self.pred_horizon] - b*x[1,self.pred_horizon])/Ux
-        constraints += [cp.abs(alpha_f) <= alpha_limit, cp.abs(alpha_r) <= alpha_limit]
+        # alpha_limit = 25
+        # alpha_f = (180/np.pi)*(x[0,self.pred_horizon] + a*x[1,self.pred_horizon])/Ux - u[0,self.pred_horizon-1]
+        # alpha_r = (180/np.pi)*(x[0,self.pred_horizon] - b*x[1,self.pred_horizon])/Ux
+        # cost += (1/36)*cp.abs(alpha_f) + (1/36)*cp.abs(alpha_r)
+        # constraints += [cp.abs(alpha_f) <= alpha_limit, cp.abs(alpha_r) <= alpha_limit]
 
         # Form and solve problem.
         prob = cp.Problem(cp.Minimize(cost), constraints)
@@ -87,14 +88,15 @@ class MPC:
         status = prob.status
         if status != "optimal":
             print("\n\n\nStatus NOT OPTIMAL (status is):", status, "\n\n\n")
+
         return u.value, x.value
 
 
 
     def create_terminal_Q(self):
         Q = np.zeros((self.sdim, self.sdim))
-        Q[2, 2] = 3
-        Q[3, 3] = 3
+        Q[2, 2] = 1
+        Q[3, 3] = 1
         return Q
 
     def create_cost_matrices(self, u_k, u_k_prev):
@@ -141,14 +143,15 @@ class Contigency_MPC:
         self.R_val = 0.01
         self.delta_t = DELTA_T
         self.steering_max = 5
-        self.slew_rate_max = 0.1
+        self.slew_rate_max = 1  # Changed this, remember to rerun with vanilla MPC too
         self.traj_handler = traj_handler
 
-    def calculate_control(self, x0, prev_x_sol, prev_controls):
+    def calculate_control(self, x0, u0, prev_x_sol, prev_controls):
         """
         x0 is the initial state, shape (8, 1)
         prev_x_sol is the previous MPC solution, that we use to find the linearized dynamics matrices
             (shape 8, self.pred_horizon)
+        u = u0 should have shape [2, 1]
         """
         # Create optimization variables.
         u = cp.Variable((self.adim, self.pred_horizon))
@@ -168,44 +171,63 @@ class Contigency_MPC:
                 "state": prev_x_sol[4:, k],
                 "control": prev_controls[1, k],
             }
-            A, B, C = contigency_linear_dynamics(prev_vals_nom, prev_vals_c, self.traj_handler.get_U_x(), self.traj_handler.get_kappa(k), "asphalt", "ice")
-            Q, R, v = self.create_cost_matrices(u[:,k], u[:,k-1])
+            Ux = self.traj_handler.get_U_x()
+            if k == 0:
+                Q, R, v = self.create_cost_matrices(u[:,k], u0)
+            else:
+                Q, R, v = self.create_cost_matrices(u[:,k], u[:,k-1])
+            A, B, C = contigency_linear_dynamics(prev_vals_nom, prev_vals_c, Ux, self.traj_handler.get_kappa(k), "asphalt", "ice")
 
             # Add costs
-            cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx, Q will be correct shape for 8 state setup
-            # cost += v[:,k]*R*v[:,k] # cp.quad_form(v[k], R)    # Add the cost u^TRu
+            cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx
+            cost += cp.quad_form(v, R)    # Add the cost u^TRu
 
             # Add constraints
-            print("shape of x:", x[:, k].shape, "shape of A", A.shape, "shape of B", B.shape, "shape of u", u[:,k].shape, "shape of C", C.shape)
+            # print("shape of x:", x[:, k].shape, "shape of A", A.shape, "shape of B", B.shape, "shape of u", u[:,k].shape, "shape of C", C.shape)
 
             constraints += [x[:,k+1] == x[:, k] + self.delta_t*A@x[:,k] + self.delta_t*B@u[:,k] + self.delta_t*C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
-            # constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
-            # constraints += [-self.slew_rate_max <= v, v <= self.steering_max] # Constraints for the control signal
+            constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
+            constraints += [-self.slew_rate_max <= v, v <= self.slew_rate_max] # Constraints for the control signal
 
         cost += cp.quad_form(x[:, self.pred_horizon], QN)
 
         # Form and solve problem.
         prob = cp.Problem(cp.Minimize(cost), constraints)
         sol = prob.solve(solver=cp.ECOS)
-        # warnings.filterwarnings("ignore")
+        status = prob.status
+        if status != "optimal":
+            print("\n\n\nStatus NOT OPTIMAL (status is):", status, "\n\n\n")
+            u_new = np.zeros_like(u.value)
+            u_new[:, 0] = u0
+            return u_new, x.value
+
+        # Final alphas
+        # alpha_limit = 25
+        # alpha_f_act = (180/np.pi)*(x.value[0,self.pred_horizon] + a*x.value[1,self.pred_horizon])/Ux - u.value[0,self.pred_horizon-1]
+        # alpha_f_act = (180/np.pi)*(x.value[0,self.pred_horizon] - b*x.value[1,self.pred_horizon])/Ux
+        # if np.abs(alpha_f_act) > alpha_limit or np.abs(alpha_f_act) > alpha_limit:
+        #     print("final alphas above limit of:", alpha_limit, "selecting nominal trajectory to linearize around")
+        #     u_new = np.zeros_like(u.value)
+        #     u_new[:, 0] = u.value[:, 0]
+        #     return u_new, np.zeros_like(x.value)
+
         return u.value, x.value
 
 
 
     def create_terminal_Q(self):
         Q = np.zeros((self.sdim, self.sdim))
-        Q[self.sdim-2, self.sdim-2] = 1
-        Q[self.sdim-1, self.sdim-1] = 1
+        Q[self.sdim-2, self.sdim-2] = 10
+        Q[self.sdim-1, self.sdim-1] = 10
         return Q
 
     def create_cost_matrices(self, u_k, u_k_prev):
         Q = np.zeros((self.sdim, self.sdim))
-        Q[self.sdim-2, self.sdim-2] = 1
-        Q[self.sdim-1, self.sdim-1] = 1
+        Q[self.sdim//2-2, self.sdim//2-2] = 1  # division by 2 sets for the nominal states
+        Q[self.sdim//2-1, self.sdim//2-1] = 1
 
         R = np.eye(self.adim)
-        R[self.adim-1, self.adim-1]
-        R = self.R_val
+        R[self.adim//2-1, self.adim//2-1] = self.R_val
 
         v = u_k - u_k_prev  # 2 x 1 vector
 

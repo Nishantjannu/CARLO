@@ -11,6 +11,7 @@ from mpc import MPC, Contigency_MPC
 from nominal_trajectory import Nominal_Trajectory_Handler
 
 from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T, FIXED_CONTROL
+from constants import CAR_FRONT_AXIS_DIST as a, CAR_BACK_AXIS_DIST as b
 from dynamics import calculate_x_y_pos
 
 
@@ -30,10 +31,13 @@ if __name__ == '__main__':
     parser.add_argument('--goal', type=str, help="left, straight, right", default="all")
     parser.add_argument("--visualize", action="store_true", default=False)
     parser.add_argument("--show_nominal", action="store_true", default=False)
+    parser.add_argument("--use_cont", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
-    mpc_controller = MPC(pred_horizon=50, traj_handler=trajectory_handler)
-    # c_mpc = Contigency_MPC(pred_horizon=1, traj_handler=trajectory_handler)
+    if not args.use_cont:
+        mpc_controller = MPC(pred_horizon=30, traj_handler=trajectory_handler)
+    else:
+        c_mpc = Contigency_MPC(pred_horizon=50, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -58,10 +62,12 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-    prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
-    prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
-    # contigency_prev_state_traj = np.zeros((c_mpc.sdim, c_mpc.pred_horizon))
-    # contigency_prev_controls = np.zeros((c_mpc.adim, c_mpc.pred_horizon))
+    if not args.use_cont:
+        prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
+        prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
+    else:
+        contigency_prev_state_traj = np.zeros((c_mpc.sdim, c_mpc.pred_horizon))
+        contigency_prev_controls = np.zeros((c_mpc.adim, c_mpc.pred_horizon))
     u0 = 0  # init this value
 
     # Arrays for logging
@@ -91,12 +97,33 @@ if __name__ == '__main__':
         print("current state:", curr_state)
 
         # Calculate the next control to take
-        prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, u0, prev_state_traj, prev_controls)
-        u0 = prev_controls[:, 0][0]
+        #
+        if not args.use_cont:
+            alpha_limit = 25
+            Ux = trajectory_handler.get_U_x()
+            alpha_f_act = (180/np.pi)*(prev_state_traj[0,-1] + a*prev_state_traj[1,-1])/Ux - prev_controls[0,-1]
+            alpha_f_act = (180/np.pi)*(prev_state_traj[0,-1] - b*prev_state_traj[1,-1])/Ux
+            if np.abs(alpha_f_act) > alpha_limit or np.abs(alpha_f_act) > alpha_limit:
+                print("final alphas above limit of:", alpha_limit, "selecting nominal trajectory to linearize around")
+                prev_controls = np.zeros_like(prev_controls)
+                prev_state_traj = np.zeros_like(prev_state_traj)
+            prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, u0, np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon)), np.zeros((mpc_controller.adim, mpc_controller.pred_horizon)))
+            u0 = prev_controls[:, 0][0]
 
-        # contingency_curr_state = np.concatenate((curr_state, curr_state))
-        # contigency_prev_controls, contigency_prev_state_traj = c_mpc.calculate_control(contingency_curr_state, contigency_prev_state_traj, contigency_prev_controls)
-        # u0 = prev_controls[:, 0][0]
+        if args.use_cont:
+            alpha_limit = 25
+            Ux = trajectory_handler.get_U_x()
+            alpha_f_act = (180/np.pi)*(contigency_prev_state_traj[0,-1] + a*contigency_prev_state_traj[1,-1])/Ux - contigency_prev_controls[0,-1]
+            alpha_f_act = (180/np.pi)*(contigency_prev_state_traj[0,-1] - b*contigency_prev_state_traj[1,-1])/Ux
+            if np.abs(alpha_f_act) > alpha_limit or np.abs(alpha_f_act) > alpha_limit:
+                print("final alphas above limit of:", alpha_limit, "selecting nominal trajectory to linearize around")
+                contigency_prev_controls = np.zeros_like(contigency_prev_controls)
+                contigency_prev_state_traj = np.zeros_like(contigency_prev_state_traj)
+
+            curr_state_c = np.concatenate((curr_state, curr_state))
+            u0_c = np.array([u0, u0])
+            contigency_prev_controls, contigency_prev_state_traj = c_mpc.calculate_control(curr_state_c, u0_c, contigency_prev_state_traj, contigency_prev_controls)
+            u0 = contigency_prev_controls[:, 0][0]
 
 
         # For testing the dynamics
@@ -111,22 +138,35 @@ if __name__ == '__main__':
 
         # Reformat the prev_states and prev_controls for next iterations linearization
         # Add the same control for the final timestep - correct?
-        prev_controls = np.concatenate((prev_controls[:, 1:], prev_controls[:, -1].reshape(-1, 1)), axis=1)
-        prev_state_traj = prev_state_traj[:, 1:]
+        if not args.use_cont:
+            prev_controls = np.concatenate((prev_controls[:, 1:], prev_controls[:, -1].reshape(-1, 1)), axis=1)
+            prev_state_traj = prev_state_traj[:, 1:]
+        else:
+            contigency_prev_controls = np.concatenate((contigency_prev_controls[:, 1:], contigency_prev_controls[:, -1].reshape(-1, 1)), axis=1)
+            contigency_prev_state_traj = contigency_prev_state_traj[:, 1:]
 
         # Use the action in the environment
         action = [u0, 0]  # u0 as steering, 0 acceleration
         obs, _, done, _ = env.step(action)
 
         # Plot the planned trajectory in the x, y, heading - space
-        # input_states = np.zeros((prev_state_traj.shape[0], prev_state_traj.shape[1]-1))
-        # input_states[0:3, :] = prev_state_traj[0:3, :-1]  # Don't get last column
-        # input_states[3, :] = prev_state_traj[3, 1:]
-        opt_headings = np.zeros((prev_state_traj.shape[1]))  # input_states.shape[1]
-        for i in range(prev_state_traj.shape[1]):
-            _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
-        proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj)
-        env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="crimson")
+        if args.use_cont:
+            opt_headings = np.zeros((contigency_prev_state_traj.shape[1]))
+            for i in range(contigency_prev_state_traj.shape[1]):
+                _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
+            # Best case
+            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[:4, :])
+            env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
+            # Worst case
+            proj_x2, proj_y2, proj_head2 = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[4:, :])
+            env.world.visualizer.draw_points(np.array([proj_x2, proj_y2]).squeeze(axis=2), color="orange")
+        else:
+            opt_headings = np.zeros((prev_state_traj.shape[1]))
+            for i in range(prev_state_traj.shape[1]):
+                _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
+            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj[:4, :])
+            env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
+
 
         # Log
         u_vec.append(u0)

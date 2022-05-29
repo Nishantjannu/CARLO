@@ -28,7 +28,7 @@ def linear_fiala(alpha, road_type):
     returns force and gradient at given alpha
     """
     scale_factor = 1000  # kN
-    saturation_derivative = 0.01  # 0
+    saturation_derivative = 0.00  # 0
     if road_type == "asphalt":
         if alpha < -6:
             return 8*scale_factor, saturation_derivative*scale_factor
@@ -51,6 +51,15 @@ def get_tire_angles(U_x, U_y, r, delta):
     """
     angle_f = np.arctan2((U_y + a*r), U_x) - np.deg2rad(delta)
     angle_r = np.arctan2((U_y - b*r), U_x)
+    return np.degrees(angle_f), np.degrees(angle_r)
+
+
+def linear_get_tire_angles(U_x, U_y, r, delta):
+    """
+    Assumes delta in degrees
+    """
+    angle_f = ((U_y + a*r)/ U_x) - np.deg2rad(delta)
+    angle_r = ((U_y - b*r)/ U_x)
     return np.degrees(angle_f), np.degrees(angle_r)
 
 
@@ -145,7 +154,7 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
 
     ############ LINEARIZATION ################
 
-    alpha_f_bar, alpha_r_bar = get_tire_angles(Ux, Uyo, ro, uo)
+    alpha_f_bar, alpha_r_bar = linear_get_tire_angles(Ux, Uyo, ro, uo)
 
     fy_f_bar, cf = linear_fiala(alpha_f_bar, road_type)
     fy_r_bar, cr = linear_fiala(alpha_r_bar, road_type)
