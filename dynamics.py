@@ -149,7 +149,7 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
 
     fy_f_bar, cf = linear_fiala(alpha_f_bar, road_type)
     fy_r_bar, cr = linear_fiala(alpha_r_bar, road_type)
-    print("Linear dynamics: fy_f, fy_r:", fy_f_bar, fy_r_bar)
+    # print("Linear dynamics: fy_f, fy_r:", fy_f_bar, fy_r_bar)
 
     A_Uy = np.array([(cf + cr)/ (m*Ux), (cf*a - cr*b)/ (m*Ux) - Ux, 0, 0 ])
     B_Uy = - cf/m

@@ -32,8 +32,8 @@ if __name__ == '__main__':
     parser.add_argument("--show_nominal", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
-    mpc_controller = MPC(pred_horizon=10, traj_handler=trajectory_handler)
-    c_mpc = Contigency_MPC(pred_horizon=1, traj_handler=trajectory_handler)
+    mpc_controller = MPC(pred_horizon=50, traj_handler=trajectory_handler)
+    # c_mpc = Contigency_MPC(pred_horizon=1, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -60,8 +60,9 @@ if __name__ == '__main__':
 
     prev_state_traj = np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon))  # pick first nominal trajectory as all 0s
     prev_controls = np.zeros((mpc_controller.adim, mpc_controller.pred_horizon))
-    contigency_prev_state_traj = np.zeros((c_mpc.sdim, c_mpc.pred_horizon))
-    contigency_prev_controls = np.zeros((c_mpc.adim, c_mpc.pred_horizon))
+    # contigency_prev_state_traj = np.zeros((c_mpc.sdim, c_mpc.pred_horizon))
+    # contigency_prev_controls = np.zeros((c_mpc.adim, c_mpc.pred_horizon))
+    u0 = 0  # init this value
 
     # Arrays for logging
     u_vec = []
@@ -90,7 +91,7 @@ if __name__ == '__main__':
         print("current state:", curr_state)
 
         # Calculate the next control to take
-        prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, prev_state_traj, prev_controls)
+        prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, u0, prev_state_traj, prev_controls)
         u0 = prev_controls[:, 0][0]
 
         # contingency_curr_state = np.concatenate((curr_state, curr_state))

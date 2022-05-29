@@ -86,7 +86,6 @@ class Entity:
             opt_x, opt_y, opt_heading = self.traj_handler.get_current_optimal_pose(opt_traj)
 
             if DEBUG_LINERIZED_DYNAMICS == 1:
-                print("prev control:", self.prev_control, "current control", delta)
                 prev_vals = {
                     "state": state,
                     "control": self.prev_control

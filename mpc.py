@@ -30,11 +30,11 @@ class MPC:
         self.adim = 1
         self.R_val = 0.01
         self.delta_t = DELTA_T
-        self.steering_max = 5
-        self.slew_rate_max = 0.5
+        self.steering_max = 7
+        self.slew_rate_max = 2
         self.traj_handler = traj_handler
 
-    def calculate_control(self, x0, prev_x_sol, prev_controls):
+    def calculate_control(self, x0, u0, prev_x_sol, prev_controls):
         """
         x0 is the initial state, shape (4, 1)
         prev_x_sol is the previous MPC solution, that we use to find the linearized dynamics matrices
@@ -51,42 +51,56 @@ class MPC:
         for k in range(self.pred_horizon):
             prev_vals = {
                 "state": prev_x_sol[:, k],
-                "control": prev_controls[:, k],
+                "control": prev_controls[:, k][0],
             }
             Ux = self.traj_handler.get_U_x()
+            if k == 0:
+                Q, R, v = self.create_cost_matrices(u[:,k], u0)
+            else:
+                Q, R, v = self.create_cost_matrices(u[:,k], u[:,k-1])
             A, B, C = linear_dynamics(prev_vals, Ux, self.traj_handler.get_kappa(k), "asphalt")
-            Q, R, v = self.create_cost_matrices(u[:,k], u[:,k-1])
+
 
             # Add costs
             cost += cp.quad_form(x[:,k], Q)  # Add the cost x^TQx
-            # cost += cp.quad_form(v, R)  #v[:,k]*R*v[:,k]    # Add the cost u^TRu
+            cost += cp.quad_form(v, R)  #v[:,k]*R*v[:,k]    # Add the cost u^TRu
 
+            # alpha_limit = 12
             # alpha_f = (180/np.pi)*(x[0,k] + a*x[1,k])/Ux - u[0,k]
             # alpha_r = (180/np.pi)*(x[0,k] - b*x[1,k])/Ux
-            # constraints += [cp.abs(alpha_f) <= 6, cp.abs(alpha_r) <= 6]
+            # cost += (1/36)*cp.square(alpha_f)
+            # cost += (1/36)*cp.square(alpha_r)
+            # constraints += [alpha_f <= alpha_limit, alpha_r <= alpha_limit]
             constraints += [x[:,k+1] == x[:, k] + self.delta_t*A@x[:,k] + self.delta_t*B*u[:,k] + self.delta_t*C]             # Add the system dynamics x(k+1) = A*x(k) + B*u(k) + C
-            constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
-            constraints += [-self.slew_rate_max <= v, v <= self.steering_max] # Constraints for the control signal
-            # TODO add constraint depending on the friction environment
+            # constraints += [-self.steering_max <= u[:,k], u[:,k] <= self.steering_max] # Constraints for the control signal
+            # constraints += [-self.slew_rate_max <= v, v <= self.slew_rate_max] # Constraints for the control signal
 
         cost += cp.quad_form(x[:, self.pred_horizon], QN)
+        alpha_limit = 15
+        alpha_f = (180/np.pi)*(x[0,self.pred_horizon] + a*x[1,self.pred_horizon])/Ux - u[0,self.pred_horizon-1]
+        alpha_r = (180/np.pi)*(x[0,self.pred_horizon] - b*x[1,self.pred_horizon])/Ux
+        constraints += [cp.abs(alpha_f) <= alpha_limit, cp.abs(alpha_r) <= alpha_limit]
 
         # Form and solve problem.
         prob = cp.Problem(cp.Minimize(cost), constraints)
         sol = prob.solve(solver=cp.ECOS)
-        # warnings.filterwarnings("ignore")
+        status = prob.status
+        if status != "optimal":
+            print("\n\n\nStatus NOT OPTIMAL (status is):", status, "\n\n\n")
         return u.value, x.value
 
 
 
     def create_terminal_Q(self):
         Q = np.zeros((self.sdim, self.sdim))
-        Q[2, 2] = 1
-        Q[3, 3] = 1
+        Q[2, 2] = 3
+        Q[3, 3] = 3
         return Q
 
     def create_cost_matrices(self, u_k, u_k_prev):
         Q = np.zeros((self.sdim, self.sdim))
+        # Q[0, 0] = 1
+        # Q[1, 1] = 1
         Q[2, 2] = 1
         Q[3, 3] = 1
 
@@ -98,10 +112,17 @@ class MPC:
         return Q, R, v
 
 
+
+
+
+
+
+
+
 class Contigency_MPC:
     """
     Contigency MPC class
-    - inherit from common MPC class? Or write some duplicate code
+    - inherit from common MPC class? Or write some duplicate code. Would be good with some inheritance
 
     # State #
     [x_nom, x_c]
