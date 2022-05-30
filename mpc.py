@@ -45,7 +45,7 @@ class MPC:
         # Create optimization variables.
         u = cp.Variable((self.adim, self.pred_horizon))
         x = cp.Variable((self.sdim, self.pred_horizon+1))
-        ny = cp.Variable(nonneg=True)
+        # ny = cp.Variable(nonneg=True)
 
         QN = self.create_terminal_Q()
 
@@ -80,9 +80,9 @@ class MPC:
 
             # Within bounds constraint
             # Better to put one ny for each loop iteration? Could do that too
-            constraints += [cp.abs(x[2, k]) - self.traj_handler.get_lane_bounds(k) <= ny]  # nr will get e
+            # constraints += [cp.abs(x[2, k]) - self.traj_handler.get_lane_bounds(k) <= ny]  # nr will get e
 
-        cost += 10000 * ny
+        # cost += 10000 * ny
 
         cost += cp.quad_form(x[:, self.pred_horizon], QN)
         # alpha_limit = 25
@@ -95,7 +95,7 @@ class MPC:
         prob = cp.Problem(cp.Minimize(cost), constraints)
         sol = prob.solve(solver=cp.ECOS)
         print("cost is: ", prob.value)
-        print("ny is: ", ny.value)
+        # print("ny is: ", ny.value)
         status = prob.status
         if status != "optimal":
             print("\n\n\nStatus NOT OPTIMAL (status is):", status, "\n\n\n")

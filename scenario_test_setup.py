@@ -55,7 +55,7 @@ if __name__ == '__main__':
     parser.add_argument("--use_ice", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
-    prediction_horizon = 100   # 45, 100
+    prediction_horizon = 100  # 50 for cmpc   # 45, 100
     if not args.use_cont:
         if args.use_ice:
             mpc_controller = MPC_ice(pred_horizon=prediction_horizon, traj_handler=trajectory_handler)
@@ -181,38 +181,39 @@ if __name__ == '__main__':
         obs, _, done, _ = env.step(action)
 
         # Plot the planned trajectory in the x, y, heading - space
-        
+
         Ux = trajectory_handler.get_U_x()
         dt = DELTA_T
         s = env.ego.s # get s for true dynamics
 
-        if args.use_cont:
-            if status == "optimal":
-                # opt_headings = np.zeros((contigency_prev_state_traj.shape[1]))
-                # for i in range(contigency_prev_state_traj.shape[1]):
+        if iteration == 0:
+            if args.use_cont:
+                if status == "optimal":
+                    # opt_headings = np.zeros((contigency_prev_state_traj.shape[1]))
+                    # for i in range(contigency_prev_state_traj.shape[1]):
+                    #     _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
+                    # # Best case
+                    # proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[:4, :])
+                    # env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
+                    # # Worst case
+                    # proj_x2, proj_y2, proj_head2 = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[4:, :])
+                    # env.world.visualizer.draw_points(np.array([proj_x2, proj_y2]).squeeze(axis=2), color="orange")
+                    N = contigency_prev_state_traj.shape[1]
+                    # Best case
+                    x_vec, y_vec, head_vec = mpc_prediction_global(opt_traj, contigency_prev_state_traj[:4,:], s, Ux, N, dt)
+                    env.world.visualizer.draw_points(np.array([x_vec, y_vec]).squeeze(axis=2), color="blue")
+                    # Worst case
+                    x_vec_2, y_vec_2, head_vec_2 = mpc_prediction_global(opt_traj, contigency_prev_state_traj[4:,:], s, Ux, N, dt)
+                    env.world.visualizer.draw_points(np.array([x_vec_2, y_vec_2]).squeeze(axis=2), color="pink")
+            else:
+                # opt_headings = np.zeros((prev_state_traj.shape[1]))
+                # for i in range(prev_state_traj.shape[1]):
                 #     _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
-                # # Best case
-                # proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[:4, :])
+                # proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj[:4, :])
                 # env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
-                # # Worst case
-                # proj_x2, proj_y2, proj_head2 = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[4:, :])
-                # env.world.visualizer.draw_points(np.array([proj_x2, proj_y2]).squeeze(axis=2), color="orange")
-                N = contigency_prev_state_traj.shape[1]
-                # Best case
-                x_vec, y_vec, head_vec = mpc_prediction_global(opt_traj, contigency_prev_state_traj[:4,:], s, Ux, N, dt)
-                env.world.visualizer.draw_points(np.array([x_vec, y_vec]).squeeze(axis=2), color="blue")
-                # Worst case
-                x_vec_2, y_vec_2, head_vec_2 = mpc_prediction_global(opt_traj, contigency_prev_state_traj[4:,:], s, Ux, N, dt)
-                env.world.visualizer.draw_points(np.array([x_vec_2, y_vec_2]).squeeze(axis=2), color="pink")
-        else:
-            # opt_headings = np.zeros((prev_state_traj.shape[1]))
-            # for i in range(prev_state_traj.shape[1]):
-            #     _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
-            # proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj[:4, :])
-            # env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
-            N = prev_state_traj.shape[1]
-            x_vec, y_vec, head_vec = mpc_prediction_global(opt_traj, prev_state_traj, s, Ux, N, dt)
-            env.world.visualizer.draw_points(np.array([x_vec, y_vec]).squeeze(axis=2), color="pink")
+                N = prev_state_traj.shape[1]
+                x_vec, y_vec, head_vec = mpc_prediction_global(opt_traj, prev_state_traj, s, Ux, N, dt)
+                env.world.visualizer.draw_points(np.array([x_vec, y_vec]).squeeze(axis=2), color="pink" if args.use_ice else "blue")
 
 
         # Log
@@ -222,7 +223,10 @@ if __name__ == '__main__':
         else:
             state_vec.append(curr_state)
         x_y_heading_vec.append([env.ego.x, env.ego.y, env.ego.heading])  # these will be offset by one compared to state and u
-        if iteration == max(prediction_horizon, 100):  # 100
+        if iteration == max(prediction_horizon, 130):  # 100
+            x_y_heading_vec = np.array(x_y_heading_vec).T
+            env.world.visualizer.draw_points(x_y_heading_vec[:2], color="red")
+
             if not args.use_cont:
                 plot_state_trajectories(initial_plan, "Initial plan")
 

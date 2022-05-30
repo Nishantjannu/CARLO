@@ -130,7 +130,7 @@ class IntersectionScenario(gym.Env):
         self.ego.set_control(action[0], action[1])
         self.world.tick()
 
-        return self._get_obs(), self._get_reward(), self.collision_exists or self.target_reached or self.world.t >= self.T, {}
+        return self._get_obs(), self._get_reward(), self.target_reached or self.world.t >= self.T, {}  # self.collision_exists or
 
     def _get_reward(self):
         """

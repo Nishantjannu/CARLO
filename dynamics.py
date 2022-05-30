@@ -169,11 +169,11 @@ def true_dynamics(state, control, Ux, kappa, road_type):
     # dynamics equations
     U_y_dot = (fy_f + fy_r) / m - r*Ux
     r_dot = (a * fy_f - b * fy_r) / Iz
-    e_dot = Uy + Ux * delta_psi
+    e_dot = Uy*np.cos(delta_psi) + Ux * np.sin(delta_psi)
+    # e_dot = Uy + Ux * delta_psi
     delta_psi_dot = r - kappa*Ux
-    s_dot = Ux - Uy * delta_psi
-    # e_dot = Uy*np.cos(delta_psi) + Ux * np.sin(delta_psi)
-    # s_dot = Ux*np.cos(delta_psi) - Uy * np.sin(delta_psi)
+    s_dot = Ux*np.cos(delta_psi) - Uy * np.sin(delta_psi)
+    # s_dot = Ux - Uy * delta_psi
 
     f_true = np.array([U_y_dot, r_dot, e_dot, delta_psi_dot, s_dot])
 

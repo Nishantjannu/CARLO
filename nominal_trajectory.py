@@ -75,9 +75,9 @@ class Nominal_Trajectory_Handler:
     def get_lane_bounds(self, future_steps=0):
         seg = self.get_segment(future_steps)
         if seg == 1 or seg == 3:
-            return self.lane_width/2
+            return self.lane_width
         else:
-            return self.lane_width/3  # This is wrong and would need to be updated
+            return self.lane_width*(2/3)  # This is wrong and would need to be updated
 
     def get_current_optimal_pose(self, opt_traj, future_steps=0):
         """
