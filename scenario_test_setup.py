@@ -35,7 +35,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
     if not args.use_cont:
-        mpc_controller = MPC(pred_horizon=50, traj_handler=trajectory_handler)
+        mpc_controller = MPC(pred_horizon=100, traj_handler=trajectory_handler)
     else:
         c_mpc = Contigency_MPC(pred_horizon=50, traj_handler=trajectory_handler)
     scenario_name = "intersection"

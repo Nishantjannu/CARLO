@@ -31,7 +31,7 @@ class MPC:
         self.R_val = 0.01
         self.delta_t = DELTA_T
         self.steering_max = 5
-        self.slew_rate_max = 0.5
+        self.slew_rate_max = 2.0
         self.traj_handler = traj_handler
 
     def calculate_control(self, x0, u0, prev_x_sol, prev_controls):
@@ -43,7 +43,7 @@ class MPC:
         # Create optimization variables.
         u = cp.Variable((self.adim, self.pred_horizon))
         x = cp.Variable((self.sdim, self.pred_horizon+1))
-        ny = cp.Variable()
+        ny = cp.Variable(nonneg=True)
 
         QN = self.create_terminal_Q()
 
@@ -78,11 +78,11 @@ class MPC:
 
             # Within bounds constraint
             # Better to put one ny for each loop iteration? Could do that too
-            constraints += [cp.abs(x[2, k]) <= self.traj_handler.get_lane_bounds(k) + ny]  # nr will get e
+            constraints += [cp.abs(x[2, k]) - self.traj_handler.get_lane_bounds(k) <= ny]  # nr will get e
 
-        cost += 5000 * cp.abs(ny)
+        cost += 10000 * ny
 
-        # cost += cp.quad_form(x[:, self.pred_horizon], QN)
+        cost += cp.quad_form(x[:, self.pred_horizon], QN)
         # alpha_limit = 25
         # alpha_f = (180/np.pi)*(x[0,self.pred_horizon] + a*x[1,self.pred_horizon])/Ux - u[0,self.pred_horizon-1]
         # alpha_r = (180/np.pi)*(x[0,self.pred_horizon] - b*x[1,self.pred_horizon])/Ux
@@ -92,6 +92,11 @@ class MPC:
         # Form and solve problem.
         prob = cp.Problem(cp.Minimize(cost), constraints)
         sol = prob.solve(solver=cp.ECOS)
+        print("cost is: ", prob.value)
+        print("ny is: ", ny.value)
+        for i in range(x.value.shape[1]):
+            print("e: ", x.value[2, i])
+            print("lane bounds: ", self.traj_handler.get_lane_bounds(i))
         status = prob.status
         if status != "optimal":
             print("\n\n\nStatus NOT OPTIMAL (status is):", status, "\n\n\n")
@@ -102,7 +107,7 @@ class MPC:
 
     def create_terminal_Q(self):
         Q = np.zeros((self.sdim, self.sdim))
-        Q[2, 2] = 1
+        Q[2, 2] = 1000
         Q[3, 3] = 1
         return Q
 

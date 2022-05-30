@@ -36,9 +36,16 @@ def linear_fiala(alpha, road_type):
             return -8*scale_factor, saturation_derivative*scale_factor
         else:
             return - 1.33 * alpha*scale_factor, -1.33*scale_factor
+    # elif road_type == "ice":
+    #     if alpha < -1:
+    #         return 1*scale_factor, saturation_derivative*scale_factor
+    #     elif alpha > 1:
+    #         return -1*scale_factor, saturation_derivative*scale_factor
+    #     else:
+    #         return - alpha*scale_factor, -1.*scale_factor
     elif road_type == "ice":
         if alpha < -1:
-            return 1*scale_factor, saturation_derivative*scale_factor
+            return 2*scale_factor, saturation_derivative*scale_factor
         elif alpha > 1:
             return -1*scale_factor, saturation_derivative*scale_factor
         else:
@@ -91,8 +98,9 @@ def calculate_x_y_pos(curr_x, curr_y, curr_heading, opt_headings, Ux, states):
         U_y = U_y_vec[i]
         delta_psi = delta_psi_vec[i]
         opt_heading = opt_headings[i]
-        dist_travelled = DELTA_T * np.array([Ux * np.cos(heading) - U_y * np.sin(heading),  # Ux is constant
-                                            Ux * np.sin(heading) + U_y * np.cos(heading)])
+        dist_travelled = DELTA_T * np.array([(Ux) * np.cos(heading) - (U_y) * np.sin(heading),  # Ux is constant
+                                            (Ux) * np.sin(heading) + (U_y) * np.cos(heading)])
+        
         heading = np.mod(opt_heading + delta_psi, 2*np.pi)  # calculate dist_travelled before updating heading, put + instead of minus for right hand turn
         x += dist_travelled[0]
         y += dist_travelled[1]
