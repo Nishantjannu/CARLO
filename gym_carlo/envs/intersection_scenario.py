@@ -61,8 +61,8 @@ class IntersectionScenario(gym.Env):
         self.world.add(Asphalt(Point(icex1 + icewidth / 2 + width2 / 2, icey1), Point(width2, MAP_HEIGHT)))  # Right
 
         # Ice patch
-        self.world.add(Asphalt(Point(icex1, icey1), Point(icewidth, iceheigth)))
-        # self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
+        # self.world.add(Asphalt(Point(icex1, icey1), Point(icewidth, iceheigth)))
+        self.world.add(IcePatch(Point(icex1, icey1), Point(icewidth, iceheigth)))
 
         # Pretty things on the side of the road
         self.world.add(Painting(Point(MAP_WIDTH - BUILDING_WIDTH/2., MAP_HEIGHT - (TOP_BUILDING_HEIGHT-self.intersection_y)/2.), Point(BUILDING_WIDTH+2*SIDEWALK_WIDTH, TOP_BUILDING_HEIGHT-self.intersection_y+2*SIDEWALK_WIDTH), 'gray64'))

@@ -24,7 +24,7 @@ class Nominal_Trajectory_Handler:
 
         # Calculate the different segments of the road
         unit_step = self.velocity * delta_t
-        self.radius = 1.5*lane_width
+        self.radius = 3*lane_width
         self.segment_1_length = map_height/2 - self.radius
         self.n_seg1 = np.arange(0, self.segment_1_length, self.unit_step).shape[0]
         self.segment_2_length = (2*self.radius*np.pi) / 4

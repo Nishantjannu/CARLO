@@ -45,11 +45,57 @@ def linear_fiala(alpha, road_type):
     #         return - alpha*scale_factor, -1.*scale_factor
     elif road_type == "ice":
         if alpha < -1:
-            return 2*scale_factor, saturation_derivative*scale_factor
+            return 1*scale_factor, saturation_derivative*scale_factor
         elif alpha > 1:
             return -1*scale_factor, saturation_derivative*scale_factor
         else:
-            return - alpha*scale_factor, -1.*scale_factor
+            return -1*alpha*scale_factor, -1.*scale_factor
+
+
+
+def get_s_nominal(opt_traj):
+    x_poses = opt_traj[:,0]
+    y_poses = opt_traj[:,1]
+    angles = opt_traj[:,2]
+
+    sx = np.square(x_poses[:-1] - x_poses[1:])
+    sy = np.square(y_poses[:-1] - y_poses[1:])
+    s_nom = np.sqrt(sx + sy)
+
+    for i in range(1,s_nom.shape[0]):
+        s_nom[i] += s_nom[i-1]
+
+    return s_nom
+
+def find_closest_nominal(opt_traj, s_nom, s):
+
+    res = next(x for x, val in enumerate(s_nom) if val >= s)
+
+    x_nom = opt_traj[:,0][res]
+    y_nom = opt_traj[:,1][res]
+    theta = opt_traj[:,2][res]
+
+    return x_nom, y_nom, theta
+
+def mpc_prediction_global(opt_traj, states, s, Ux, N, dt):
+    x_vec = np.zeros((N, 1))
+    y_vec = np.zeros((N, 1))
+    head_vec = np.zeros((N, 1))
+
+    s_nom = get_s_nominal(opt_traj)
+
+    for i in range(N):
+        U_y, _, e, delta_psi = states[:, i]
+
+        s += (Ux*np.cos(delta_psi) - U_y * np.sin(delta_psi)) * dt
+
+        x_nom, y_nom, theta = find_closest_nominal(opt_traj, s_nom, s)
+
+        x_vec[i] = x_nom - e * np.sin(theta)
+        y_vec[i] = y_nom + e * np.cos(theta)
+        head_vec[i] = theta + delta_psi
+
+    return x_vec, y_vec, head_vec
 
 
 def get_tire_angles(U_x, U_y, r, delta):
@@ -100,7 +146,7 @@ def calculate_x_y_pos(curr_x, curr_y, curr_heading, opt_headings, Ux, states):
         opt_heading = opt_headings[i]
         dist_travelled = DELTA_T * np.array([(Ux) * np.cos(heading) - (U_y) * np.sin(heading),  # Ux is constant
                                             (Ux) * np.sin(heading) + (U_y) * np.cos(heading)])
-        
+
         heading = np.mod(opt_heading + delta_psi, 2*np.pi)  # calculate dist_travelled before updating heading, put + instead of minus for right hand turn
         x += dist_travelled[0]
         y += dist_travelled[1]
@@ -192,7 +238,7 @@ def linear_dynamics(prev_values, Ux, kappa, road_type):
 
 
 if __name__ == "__main__":
-    x = np.arange(-20, 20, 0.1)
+    x = np.arange(-10, 10, 0.1)
     y_asph = np.zeros_like(x)
     y_ice = np.zeros_like(x)
     for i in range(x.shape[0]):
@@ -202,5 +248,7 @@ if __name__ == "__main__":
     plt.figure()
     plt.plot(x, y_asph, label="Asphalt")
     plt.plot(x, y_ice, label="Ice")
+    plt.xlabel("Tire Slip Angle (alpha) [deg]")
+    plt.ylabel("Lateral Tire Force (F_y) [kN]")
     plt.legend()
     plt.show()

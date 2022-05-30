@@ -3,7 +3,7 @@ from .geometry import Point, Rectangle, Circle, Ring, Line
 from typing import Union
 import copy
 
-from dynamics import true_dynamics, linear_dynamics, calculate_x_y_pos
+from dynamics import *
 from nominal_trajectory import Nominal_Trajectory_Handler
 from constants import *
 
@@ -111,15 +111,22 @@ class Entity:
                 self.delta_psi += delta_psi_dot * dt
                 self.s += s_dot * dt
 
-            # Find the new x, y and z of the car
-            ipt_state = state.copy()
-            # ipt_state[3] = self.delta_psi  # Update this value to shift it
-            ipt_state = ipt_state.reshape((ipt_state.shape[0], 1))
-            new_car_state = calculate_x_y_pos(self.center.x, self.center.y, self.heading, [opt_heading], U_x, ipt_state)
+            # # Find the new x, y and z of the car
+            # ipt_state = state.copy()
+            # # ipt_state[3] = self.delta_psi  # Update this value to shift it
+            # ipt_state = ipt_state.reshape((ipt_state.shape[0], 1))
+            # new_car_state = calculate_x_y_pos(self.center.x, self.center.y, self.heading, [opt_heading], U_x, ipt_state)
+            #
+            # # Update the car's x, y and heading
+            # self.center = Point(new_car_state[0], new_car_state[1])
+            # self.heading = new_car_state[2][0][0]  # - problem with arrays
+            s_nom = get_s_nominal(opt_traj)
+            x_nom, y_nom , theta = find_closest_nominal(opt_traj, s_nom, self.s)
 
-            # Update the car's x, y and heading
-            self.center = Point(new_car_state[0], new_car_state[1])
-            self.heading = new_car_state[2][0][0]  # - problem with arrays
+            x_new = x_nom - self.e * np.sin(theta)
+            y_new = y_nom + self.e * np.cos(theta)
+            self.center = Point(x_new, y_new)
+            self.heading = theta + self.delta_psi
 
             self.buildGeometry()
 

@@ -7,12 +7,32 @@ import argparse
 import matplotlib.pyplot as plt
 from gym_carlo.envs.interactive_controllers import GoalController
 from utils_new import *
-from mpc import MPC, Contigency_MPC
+from mpc import MPC, Contigency_MPC, MPC_ice
 from nominal_trajectory import Nominal_Trajectory_Handler
 
 from constants import MAP_WIDTH, MAP_HEIGHT, LANE_WIDTH, INITIAL_VELOCITY, DELTA_T, FIXED_CONTROL
 from constants import CAR_FRONT_AXIS_DIST as a, CAR_BACK_AXIS_DIST as b
-from dynamics import calculate_x_y_pos
+from dynamics import *
+
+
+def plot_state_trajectories(states, title):
+    fig, axes = plt.subplots(nrows=4, ncols=1)
+    fig.suptitle(title)
+    axes[0].plot(states[0, :], label="U_y")
+    axes[0].legend()
+    axes[1].plot(states[1, :], label="r")
+    axes[1].legend()
+    axes[2].plot(states[2, :], label="e")
+    axes[2].legend()
+    axes[3].plot(states[3, :], label="Delta_psi")
+    axes[3].legend()
+
+def plot_control(controls):
+    plt.figure()
+    plt.plot(controls)
+    plt.xlabel("Time")
+    plt.ylabel("Delta")
+
 
 
 def controller_mapping(scenario_name, control):
@@ -32,12 +52,17 @@ if __name__ == '__main__':
     parser.add_argument("--visualize", action="store_true", default=False)
     parser.add_argument("--show_nominal", action="store_true", default=False)
     parser.add_argument("--use_cont", action="store_true", default=False)
+    parser.add_argument("--use_ice", action="store_true", default=False)
     args = parser.parse_args()
     trajectory_handler = Nominal_Trajectory_Handler(map_height=MAP_HEIGHT, map_width=MAP_WIDTH, lane_width=LANE_WIDTH, velocity=INITIAL_VELOCITY, delta_t=DELTA_T)
+    prediction_horizon = 100   # 45, 100
     if not args.use_cont:
-        mpc_controller = MPC(pred_horizon=100, traj_handler=trajectory_handler)
+        if args.use_ice:
+            mpc_controller = MPC_ice(pred_horizon=prediction_horizon, traj_handler=trajectory_handler)
+        else:
+            mpc_controller = MPC(pred_horizon=prediction_horizon, traj_handler=trajectory_handler)
     else:
-        c_mpc = Contigency_MPC(pred_horizon=50, traj_handler=trajectory_handler)
+        c_mpc = Contigency_MPC(pred_horizon=prediction_horizon, traj_handler=trajectory_handler)
     scenario_name = "intersection"
 
     if args.goal.lower() == 'all':
@@ -110,6 +135,9 @@ if __name__ == '__main__':
             prev_controls, prev_state_traj = mpc_controller.calculate_control(curr_state, u0, np.zeros((mpc_controller.sdim, mpc_controller.pred_horizon)), np.zeros((mpc_controller.adim, mpc_controller.pred_horizon)))
             u0 = prev_controls[:, 0][0]
 
+            if iteration == 0:
+                initial_plan = prev_state_traj
+
         if args.use_cont:
             alpha_limit = 25
             Ux = trajectory_handler.get_U_x()
@@ -124,6 +152,9 @@ if __name__ == '__main__':
             u0_c = np.array([u0, u0])
             contigency_prev_controls, contigency_prev_state_traj, status = c_mpc.calculate_control(curr_state_c, u0_c, contigency_prev_state_traj, contigency_prev_controls)
             u0 = contigency_prev_controls[:, 0][0]
+
+            if iteration == 0:
+                initial_plan = contigency_prev_state_traj
 
 
         # For testing the dynamics
@@ -162,24 +193,55 @@ if __name__ == '__main__':
                 proj_x2, proj_y2, proj_head2 = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), contigency_prev_state_traj[4:, :])
                 env.world.visualizer.draw_points(np.array([proj_x2, proj_y2]).squeeze(axis=2), color="orange")
         else:
-            opt_headings = np.zeros((prev_state_traj.shape[1]))
-            for i in range(prev_state_traj.shape[1]):
-                _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
-            proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj[:4, :])
-            env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
+            # opt_headings = np.zeros((prev_state_traj.shape[1]))
+            # for i in range(prev_state_traj.shape[1]):
+            #     _, _, opt_headings[i] = trajectory_handler.get_current_optimal_pose(opt_traj, i)
+            # proj_x, proj_y, proj_head = calculate_x_y_pos(env.ego.x, env.ego.y, env.ego.heading, opt_headings, trajectory_handler.get_U_x(), prev_state_traj[:4, :])
+            # env.world.visualizer.draw_points(np.array([proj_x, proj_y]).squeeze(axis=2), color="blue")
+            N = prev_state_traj.shape[1]
+            Ux = trajectory_handler.get_U_x()
+            dt = DELTA_T
+            s = env.ego.s # get s for true dynamics
+
+            x_vec, y_vec, head_vec = mpc_prediction_global(opt_traj, prev_state_traj, s, Ux, N, dt)
+
+            env.world.visualizer.draw_points(np.array([x_vec, y_vec]).squeeze(axis=2), color="pink")
 
 
         # Log
         u_vec.append(u0)
-        state_vec.append(curr_state)
+        if args.use_cont:
+            state_vec.append(curr_state_c)
+        else:
+            state_vec.append(curr_state)
         x_y_heading_vec.append([env.ego.x, env.ego.y, env.ego.heading])  # these will be offset by one compared to state and u
+        if iteration == max(prediction_horizon, 100):  # 100
+            if not args.use_cont:
+                plot_state_trajectories(initial_plan, "Initial plan")
+
+                plot_state_trajectories(np.array(state_vec).T, ("Actual trajectories"))
+
+                plot_control(u_vec)
+                plt.title("Control trajectories")
+                plt.show()
+            else:
+                plot_state_trajectories(initial_plan[:4, :], "Initial plan: Asphalt model")
+
+                plot_state_trajectories(initial_plan[4:, :], "Initial plan: Ice model")
+
+                plot_state_trajectories(np.array(state_vec).T[:4, :], "Actual Trajectory")
+
+                plot_control(u_vec)
+                plt.title("Control trajectories")
+
+                plt.show()
 
         iteration += 1
         trajectory_handler.increment_current_index()
 
         if args.visualize:
             env.render()
-            while time.time() - t < env.dt*5/2:   # Temp * 10
+            while time.time() - t < env.dt/2:   # Temp * 10
                 pass  # runs 2x speed. This is not great, but time.sleep() causes problems with the interactive controller
         if done:
             env.close()
